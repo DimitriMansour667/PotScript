@@ -17,6 +17,7 @@ import io.wispforest.owo.ui.core.Sizing;
 import io.wispforest.owo.ui.core.Surface;
 import io.wispforest.owo.ui.core.VerticalAlignment;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
@@ -34,6 +35,8 @@ public class TerminalScreen extends BaseOwoScreen<FlowLayout> {
 	private static final int TERM_HEIGHT = 150;
 	private static final int GLFW_KEY_ENTER = 257;
 	private static final int GLFW_KEY_KP_ENTER = 335;
+	private static final int GLFW_KEY_Q = 81;
+	private static final int GLFW_KEY_S = 83;
 	private static final int MAX_CONSOLE_LABELS = 200;
 
 	private static TerminalScreen openScreen;
@@ -104,6 +107,21 @@ public class TerminalScreen extends BaseOwoScreen<FlowLayout> {
 		root.child(editorOpen ? editorView : consoleView);
 
 		rootComponent.child(root);
+	}
+
+	@Override
+	public boolean keyPressed(KeyEvent event) {
+		if (editorOpen && event.hasControlDown()) {
+			if (event.key() == GLFW_KEY_S) {
+				saveCode(false);
+				return true;
+			}
+			if (event.key() == GLFW_KEY_Q) {
+				showConsole();
+				return true;
+			}
+		}
+		return super.keyPressed(event);
 	}
 
 	private Component titleText() {
