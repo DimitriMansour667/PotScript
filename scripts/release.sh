@@ -28,6 +28,18 @@ while IFS= read -r line; do
 done
 DESC=$(printf '%s\n' "${DESC_LINES[@]}")
 
+VERSION="${TAG#v}"
+if ! grep -q '^version=' gradle.properties; then
+	echo "error: could not find 'version=' in gradle.properties" >&2
+	exit 1
+fi
+CURRENT_VERSION=$(sed -n 's/^version=//p' gradle.properties)
+if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+	sed -i "s/^version=.*/version=$VERSION/" gradle.properties
+	git add gradle.properties
+	git commit -m "Set version to $VERSION for $TAG release"
+fi
+
 echo "Building..."
 ./gradlew clean build
 
@@ -39,7 +51,7 @@ fi
 echo "Built: $JAR"
 
 git tag "$TAG"
-git push origin "$TAG"
+git push origin HEAD "$TAG"
 
 gh release create "$TAG" "$JAR" --title "$TAG" --notes "$DESC"
 
