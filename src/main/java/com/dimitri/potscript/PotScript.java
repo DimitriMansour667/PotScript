@@ -2,11 +2,13 @@ package com.dimitri.potscript;
 
 import com.dimitri.potscript.block.ServerPotBlock;
 import com.dimitri.potscript.block.ServerPotBlockEntity;
+import com.dimitri.potscript.item.MemoryCardItem;
 import com.dimitri.potscript.net.PotScriptNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerBlockEntityEvents;
 import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -33,6 +35,8 @@ public class PotScript implements ModInitializer {
 	public static final ServerPotBlock SERVER_POT;
 	public static final Item SERVER_POT_ITEM;
 	public static final BlockEntityType<ServerPotBlockEntity> SERVER_POT_BLOCK_ENTITY;
+	public static final DataComponentType<MemoryCardItem.Program> PROGRAM_COMPONENT;
+	public static final Item MEMORY_CARD_ITEM;
 	public static final CreativeModeTab TAB;
 
 	static {
@@ -56,11 +60,27 @@ public class PotScript implements ModInitializer {
 		SERVER_POT_BLOCK_ENTITY = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE, id,
 				new BlockEntityType<>(ServerPotBlockEntity::new, Set.of(SERVER_POT)));
 
+		PROGRAM_COMPONENT = Registry.register(BuiltInRegistries.DATA_COMPONENT_TYPE, id("program"),
+				DataComponentType.<MemoryCardItem.Program>builder()
+						.persistent(MemoryCardItem.Program.CODEC)
+						.networkSynchronized(MemoryCardItem.Program.STREAM_CODEC)
+						.cacheEncoding()
+						.build());
+
+		ResourceKey<Item> cardKey = ResourceKey.create(Registries.ITEM, id("memory_card"));
+		MEMORY_CARD_ITEM = Registry.register(BuiltInRegistries.ITEM, cardKey, new MemoryCardItem(
+				new Item.Properties()
+						.setId(cardKey)
+						.stacksTo(1)));
+
 		TAB = Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, id("potscript"),
 				FabricCreativeModeTab.builder()
 						.title(Component.translatable("itemGroup.potscript"))
 						.icon(() -> new ItemStack(SERVER_POT_ITEM))
-						.displayItems((parameters, output) -> output.accept(SERVER_POT_ITEM))
+						.displayItems((parameters, output) -> {
+							output.accept(SERVER_POT_ITEM);
+							output.accept(MEMORY_CARD_ITEM);
+						})
 						.build());
 	}
 

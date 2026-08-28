@@ -15,7 +15,7 @@ class BuiltinDocsTest {
 
 	@Test
 	void documentsEveryBuiltin() {
-		assertEquals(63, BuiltinDocs.all().size());
+		assertEquals(68, BuiltinDocs.all().size());
 	}
 
 	@Test
@@ -53,7 +53,7 @@ class BuiltinDocsTest {
 	/**
 	 * The real registrations, checked against the table. Registering closes
 	 * over the block entity but never calls it, so a null pot is enough to get
-	 * all 63 natives installed without a world.
+	 * all 68 natives installed without a world.
 	 */
 	@Test
 	void tableAgreesWithTheActualRegistrations() {

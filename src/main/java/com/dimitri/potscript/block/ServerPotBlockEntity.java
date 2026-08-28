@@ -27,16 +27,24 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,6 +73,7 @@ public class ServerPotBlockEntity extends BlockEntity {
 	private final ArrayDeque<String> console = new ArrayDeque<>();
 	private final LinkedHashMap<String, String> disk = new LinkedHashMap<>();
 	private final int[] outputs = new int[6];
+	private final int[] pulseTicksLeft = new int[6];
 
 	private final ArrayDeque<ArrayList<Object>> mailbox = new ArrayDeque<>();
 	private final ArrayDeque<String> inputQueue = new ArrayDeque<>();
@@ -85,6 +94,7 @@ public class ServerPotBlockEntity extends BlockEntity {
 
 	public static void serverTick(ServerLevel level, BlockPos pos, BlockState state, ServerPotBlockEntity be) {
 		be.ensureRegistered(level.getServer());
+		be.tickPulses();
 
 		if (be.running && be.vm != null) {
 			be.pumpVm();
@@ -320,6 +330,21 @@ public class ServerPotBlockEntity extends BlockEntity {
 		}
 	}
 
+	// ------------------------------------------------------------------ memory card
+
+	public String codeForCard() {
+		return code;
+	}
+
+	/** A memory card was tapped on the pot: overwrite the program with the card's copy. */
+	public void installProgram(String newCode, String fromHostname) {
+		if (running) stopProgram();
+		code = newCode.length() > MAX_CODE_LENGTH ? newCode.substring(0, MAX_CODE_LENGTH) : newCode;
+		setChanged();
+		consolePrint("[card] installed program from '" + fromHostname + "' (" + code.length() + " chars)");
+		flushConsole();
+	}
+
 	private static String abbreviate(String value) {
 		return value.length() > 40 ? value.substring(0, 40) + "..." : value;
 	}
@@ -466,15 +491,40 @@ public class ServerPotBlockEntity extends BlockEntity {
 
 	public void rsSet(String side, int emittedLevel) {
 		Direction direction = sideToDirection(side, "rs_set");
+		pulseTicksLeft[direction.get3DDataValue()] = 0;
 		if (outputs[direction.get3DDataValue()] == emittedLevel) return;
 		outputs[direction.get3DDataValue()] = emittedLevel;
 		setChanged();
 		notifyRedstone();
 	}
 
+	public void rsPulse(String side, int emittedLevel, int ticks) {
+		Direction direction = sideToDirection(side, "rs_pulse");
+		if (ticks <= 0) throw new ScriptError(0, "rs_pulse: ticks must be positive");
+		int i = direction.get3DDataValue();
+		pulseTicksLeft[i] = ticks;
+		setChanged();
+		if (outputs[i] != emittedLevel) {
+			outputs[i] = emittedLevel;
+			notifyRedstone();
+		}
+	}
+
+	/** Counts down rs_pulse timers; a side whose timer hits zero drops back to 0. */
+	private void tickPulses() {
+		for (int i = 0; i < pulseTicksLeft.length; i++) {
+			if (pulseTicksLeft[i] > 0 && --pulseTicksLeft[i] == 0 && outputs[i] != 0) {
+				outputs[i] = 0;
+				setChanged();
+				notifyRedstone();
+			}
+		}
+	}
+
 	public void rsReset() {
 		boolean changed = false;
 		for (int i = 0; i < outputs.length; i++) {
+			pulseTicksLeft[i] = 0;
 			if (outputs[i] != 0) {
 				outputs[i] = 0;
 				changed = true;
@@ -585,6 +635,46 @@ public class ServerPotBlockEntity extends BlockEntity {
 		}
 	}
 
+	// ------------------------------------------------------------------ script I/O: signs
+
+	private static final int SIGN_LINES = 4;
+	private static final int SIGN_MAX_COLS = 48;
+
+	private SignBlockEntity signAt(String side, String fnName) {
+		Direction direction = sideToDirection(side, fnName);
+		if (level == null) return null;
+		return level.getBlockEntity(worldPosition.relative(direction)) instanceof SignBlockEntity sign ? sign : null;
+	}
+
+	public Object signRead(String side) {
+		SignBlockEntity sign = signAt(side, "sign_read");
+		if (sign == null) return null;
+		ArrayList<Object> lines = new ArrayList<>(SIGN_LINES);
+		for (int i = 0; i < SIGN_LINES; i++) {
+			lines.add(sign.getFrontText().getMessage(i, false).getString());
+		}
+		return lines;
+	}
+
+	public boolean signWrite(String side, List<String> lines, String colorName) {
+		if (lines.size() > SIGN_LINES) throw new ScriptError(0, "sign_write: a sign has " + SIGN_LINES + " lines");
+		SignBlockEntity sign = signAt(side, "sign_write");
+		if (sign == null) return false;
+		SignText text = sign.getFrontText();
+		if (colorName != null) {
+			DyeColor color = DyeColor.byName(colorName.toLowerCase(), null);
+			if (color == null) throw new ScriptError(0, "sign_write: unknown dye color '" + colorName + "'");
+			text = text.setColor(color);
+		}
+		for (int i = 0; i < SIGN_LINES; i++) {
+			String line = i < lines.size() ? lines.get(i) : "";
+			if (line.length() > SIGN_MAX_COLS) line = line.substring(0, SIGN_MAX_COLS);
+			text = text.setMessage(i, Component.literal(line));
+		}
+		sign.setText(text, true);
+		return true;
+	}
+
 	// ------------------------------------------------------------------ script I/O: world & players
 
 	public long gameTime() {
@@ -623,6 +713,29 @@ public class ServerPotBlockEntity extends BlockEntity {
 
 	public int lightLevel() {
 		return level != null ? level.getRawBrightness(worldPosition.above(), 0) : 0;
+	}
+
+	private static final int MAX_ENTITY_RESULTS = 32;
+
+	/** [type_id, display_name, distance] per living entity, nearest first. */
+	public ArrayList<Object> nearbyEntities(double range) {
+		ArrayList<Object> result = new ArrayList<>();
+		if (!(level instanceof ServerLevel serverLevel)) return result;
+		Vec3 center = Vec3.atCenterOf(worldPosition);
+		List<LivingEntity> found = serverLevel.getEntitiesOfClass(LivingEntity.class,
+				new AABB(worldPosition).inflate(range), LivingEntity::isAlive);
+		found.sort(Comparator.comparingDouble(entity -> entity.distanceToSqr(center)));
+		for (LivingEntity entity : found) {
+			if (result.size() >= MAX_ENTITY_RESULTS) break;
+			double distance = Math.sqrt(entity.distanceToSqr(center));
+			if (distance > range) continue;
+			ArrayList<Object> entry = new ArrayList<>(3);
+			entry.add(EntityType.getKey(entity.getType()).toString());
+			entry.add(entity.getName().getString());
+			entry.add(Math.round(distance * 10.0) / 10.0);
+			result.add(entry);
+		}
+		return result;
 	}
 
 	public ArrayList<Object> nearbyPlayerNames(double range) {
@@ -697,6 +810,7 @@ public class ServerPotBlockEntity extends BlockEntity {
 		out.putString("code", code);
 		out.putBoolean("autorun", autorun || running);
 		out.putIntArray("outputs", outputs.clone());
+		out.putIntArray("pulses", pulseTicksLeft.clone());
 		out.store("console", Codec.STRING.listOf(), List.copyOf(console));
 		out.store("disk_keys", Codec.STRING.listOf(), List.copyOf(disk.keySet()));
 		out.store("disk_values", Codec.STRING.listOf(), List.copyOf(disk.values()));
@@ -711,6 +825,10 @@ public class ServerPotBlockEntity extends BlockEntity {
 		int[] savedOutputs = in.getIntArray("outputs").orElse(null);
 		if (savedOutputs != null && savedOutputs.length == 6) {
 			System.arraycopy(savedOutputs, 0, outputs, 0, 6);
+		}
+		int[] savedPulses = in.getIntArray("pulses").orElse(null);
+		if (savedPulses != null && savedPulses.length == 6) {
+			System.arraycopy(savedPulses, 0, pulseTicksLeft, 0, 6);
 		}
 		console.clear();
 		console.addAll(in.read("console", Codec.STRING.listOf()).orElse(List.of()));

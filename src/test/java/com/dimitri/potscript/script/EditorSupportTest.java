@@ -197,6 +197,6 @@ class EditorSupportTest {
 	@Test
 	void completesInsideAHalfWrittenProgram() {
 		List<String> names = completionNamesAt("while true {\n    let s = \"unterminated\n    rs_|");
-		assertEquals(List.of("rs_get", "rs_reset", "rs_set"), names);
+		assertEquals(List.of("rs_get", "rs_pulse", "rs_reset", "rs_set"), names);
 	}
 }

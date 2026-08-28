@@ -71,6 +71,7 @@ public final class BuiltinDocs {
 		// ---- timing ----
 		doc("sleep", "ticks", 1, 1, "nil", "Blocks for ticks game ticks (20 = 1 second).");
 		doc("gametime", "", 0, 0, "number", "Total ticks the world has existed. Monotonic.");
+		doc("realtime", "", 0, 0, "number", "Real-world Unix time in whole seconds.");
 		doc("daytime", "", 0, 0, "number", "Overworld clock time, 0-23999 per day cycle.");
 		doc("day", "", 0, 0, "number", "The current day number, floor(daytime() / 24000).");
 		doc("uptime", "", 0, 0, "number", "Ticks since this program started; 0 when not running.");
@@ -86,6 +87,7 @@ public final class BuiltinDocs {
 
 		// ---- redstone ----
 		doc("rs_set", "side, level", 2, 2, "nil", "Emit level (clamped 0-15) out of that side, weak and strong.");
+		doc("rs_pulse", "side, level, [ticks]", 2, 3, "nil", "Emit level out of that side for ticks game ticks (default 2), then drop to 0.");
 		doc("rs_get", "side", 1, 1, "number", "The redstone signal the neighbour on that side feeds into the pot.");
 		doc("rs_reset", "", 0, 0, "nil", "Set all six outputs to 0.");
 
@@ -97,6 +99,10 @@ public final class BuiltinDocs {
 		doc("inv_find", "side, item", 2, 2, "number", "First slot holding item, or -1 if not found.");
 		doc("inv_move", "from, to, [item], [max]", 2, 4, "number", "Moves items between neighbours, hopper-style; returns how many moved.");
 
+		// ---- signs ----
+		doc("sign_read", "side", 1, 1, "list", "The 4 front-text lines of the sign on that side, or nil if there is no sign.");
+		doc("sign_write", "side, lines, [color]", 2, 3, "bool", "Writes lines (a list of up to 4, or one string) to the sign's front; optional dye color. False if there is no sign.");
+
 		// ---- world sensors ----
 		doc("pos", "", 0, 0, "list", "[x, y, z] of the pot.");
 		doc("dim", "", 0, 0, "string", "Dimension id, e.g. \"minecraft:overworld\".");
@@ -106,6 +112,7 @@ public final class BuiltinDocs {
 
 		// ---- players & sound ----
 		doc("players", "[range]", 0, 1, "list", "Names of players within range blocks (default 16, clamped 0-64).");
+		doc("entities", "[range]", 0, 1, "list", "[type, name, distance] per living entity within range blocks (default 8, clamped 0-32), nearest first, max 32.");
 		doc("say", "text, [range]", 1, 2, "number", "Sends \"<hostname> text\" to nearby chat; returns how many were reached.");
 		doc("beep", "[pitch]", 0, 1, "nil", "Plays a note block \"bit\" sound. pitch is a semitone 0-24, default 12.");
 

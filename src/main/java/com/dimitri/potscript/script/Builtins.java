@@ -48,6 +48,7 @@ public final class Builtins {
 			return Vm.BLOCK;
 		});
 		def(vm, "gametime", 0, 0, (v, args) -> (double) be.gameTime());
+		def(vm, "realtime", 0, 0, (v, args) -> Math.floor(System.currentTimeMillis() / 1000.0));
 		def(vm, "daytime", 0, 0, (v, args) -> (double) be.dayTime());
 		def(vm, "day", 0, 0, (v, args) -> Math.floor(be.dayTime() / 24000.0));
 		def(vm, "uptime", 0, 0, (v, args) -> (double) be.programUptime());
@@ -74,6 +75,12 @@ public final class Builtins {
 			be.rsSet(asString(args[0], "rs_set"), Math.clamp(level, 0, 15));
 			return null;
 		});
+		def(vm, "rs_pulse", 2, 3, (v, args) -> {
+			int level = (int) toNumber(args[1], "rs_pulse");
+			int ticks = args.length > 2 ? (int) toNumber(args[2], "rs_pulse") : 2;
+			be.rsPulse(asString(args[0], "rs_pulse"), Math.clamp(level, 0, 15), ticks);
+			return null;
+		});
 		def(vm, "rs_get", 1, 1, (v, args) -> (double) be.rsGet(asString(args[0], "rs_get")));
 		def(vm, "rs_reset", 0, 0, (v, args) -> {
 			be.rsReset();
@@ -95,6 +102,19 @@ public final class Builtins {
 			return be.invMove(asString(args[0], "inv_move"), asString(args[1], "inv_move"), item, max);
 		});
 
+		// ---- signs ----
+		def(vm, "sign_read", 1, 1, (v, args) -> be.signRead(asString(args[0], "sign_read")));
+		def(vm, "sign_write", 2, 3, (v, args) -> {
+			List<String> lines = new ArrayList<>();
+			if (args[1] instanceof ArrayList<?> list) {
+				for (Object element : list) lines.add(Values.stringify(element));
+			} else {
+				lines.add(Values.stringify(args[1]));
+			}
+			String color = args.length > 2 && args[2] != null ? asString(args[2], "sign_write") : null;
+			return be.signWrite(asString(args[0], "sign_write"), lines, color);
+		});
+
 		// ---- world sensors ----
 		def(vm, "pos", 0, 0, (v, args) -> be.worldPos());
 		def(vm, "dim", 0, 0, (v, args) -> be.dimensionId());
@@ -106,6 +126,10 @@ public final class Builtins {
 		def(vm, "players", 0, 1, (v, args) -> {
 			double range = args.length > 0 ? toNumber(args[0], "players") : 16;
 			return be.nearbyPlayerNames(Math.clamp(range, 0, 64));
+		});
+		def(vm, "entities", 0, 1, (v, args) -> {
+			double range = args.length > 0 ? toNumber(args[0], "entities") : 8;
+			return be.nearbyEntities(Math.clamp(range, 0, 32));
 		});
 		def(vm, "say", 1, 2, (v, args) -> {
 			double range = args.length > 1 ? toNumber(args[1], "say") : 16;
@@ -277,16 +301,18 @@ public final class Builtins {
 				"  lists: let l = [1, 2]  l[0]  push(l, 3)  pop(l)  len(l)",
 				"  ops: + - * / %  == != < <= > >=  and or not",
 				"console: print(...) clear() read()",
-				"timing: sleep(ticks) gametime() daytime() day() uptime()",
+				"timing: sleep(ticks) gametime() daytime() day() uptime() realtime()",
 				"wifi: hostname() sethost(h) send(host, v) broadcast(v)",
 				"      recv([timeout]) has_msg() peers()",
-				"redstone: rs_set(side, 0..15) rs_get(side) rs_reset()",
-				"      sides: up down north south east west",
+				"redstone: rs_set(side, 0..15) rs_pulse(side, level, [ticks])",
+				"      rs_get(side) rs_reset()  sides: up down north south east west",
+				"signs: sign_read(side) sign_write(side, lines, [color])",
 				"inventory: block(side) inv_size(side) inv_get(side, slot)",
 				"      inv_count(side, item) inv_find(side, item) -> slot or -1",
 				"      inv_move(from, to, [item], [max]) -> items moved",
 				"world: pos() dim() biome() weather() light()",
 				"players: players([range]) say(text, [range]) beep([pitch])",
+				"mobs: entities([range]) -> [[type, name, dist], ...]",
 				"disk: store(k, v) load(k) delkey(k) keys()",
 				"math: random() randint(a,b) floor ceil round abs sqrt pow min max",
 				"text: str num type len upper lower trim split join sub find chr ord",

@@ -1,4 +1,12 @@
 {
 	"block.potscript.server_pot": "Server Pot",
+	"item.potscript.memory_card": "Memory Card",
+	"item.potscript.memory_card.tooltip_blank": "Blank — sneak-click a Server Pot to copy its program",
+	"item.potscript.memory_card.tooltip_program": "Program from '%s' (%s chars)",
+	"item.potscript.memory_card.tooltip_install": "Click a Server Pot to install it",
+	"item.potscript.memory_card.nothing_to_copy": "This pot has no program to copy",
+	"item.potscript.memory_card.copied": "Copied program from '%s' (%s chars)",
+	"item.potscript.memory_card.blank_hint": "Card is blank — sneak-click a pot to copy its program",
+	"item.potscript.memory_card.installed": "Installed program from '%s' into '%s'",
 	"itemGroup.potscript": "PotScript"
 }

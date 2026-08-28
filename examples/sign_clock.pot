@@ -1,0 +1,29 @@
+# Sign clock: keeps a sign updated with the in-game day, time of day and
+# the real-world time. Place a sign on any side and point 'side' at it.
+
+let side = "north"
+
+fn pad(n) {
+    if n < 10 { return "0" + str(n) }
+    return str(n)
+}
+
+while true {
+    # in-game clock: 0 ticks = 06:00, 24000 ticks per day
+    let t = daytime() % 24000
+    let hour = floor(t / 1000 + 6) % 24
+    let minute = floor((t % 1000) * 60 / 1000)
+
+    # real-world clock (UTC), from unix seconds
+    let now = realtime()
+    let rh = floor(now / 3600) % 24
+    let rm = floor(now / 60) % 60
+
+    sign_write(side, [
+        "day " + str(day()),
+        pad(hour) + ":" + pad(minute),
+        "real (UTC)",
+        pad(rh) + ":" + pad(rm)
+    ], "cyan")
+    sleep(20)
+}
