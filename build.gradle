@@ -20,6 +20,8 @@ repositories {
 loom {
 	splitEnvironmentSourceSets()
 
+	accessWidenerPath = file("src/main/resources/potscript.accesswidener")
+
 	mods {
 		"potscript" {
 			sourceSet sourceSets.main
@@ -40,6 +42,16 @@ dependencies {
 	// owo-lib: UI, networking, config
 	implementation "io.wispforest:owo-lib:${project.owo_version}"
 	include "io.wispforest:owo-sentinel:${project.owo_version}"
+
+	// The language core (lexer, compiler, formatter, builtin docs) is
+	// Minecraft-free, so it can be unit tested on a plain JVM.
+	testImplementation platform("org.junit:junit-bom:5.11.4")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
 }
 
 processResources {

@@ -1,0 +1,9 @@
+accessWidener	v2	official
+
+# 26.2 ships unobfuscated, so the official namespace already has readable names.
+#
+# The terminal's code editor draws its own syntax-coloured text, which means
+# walking the display lines the text field has already wrapped. StringView is
+# the record describing one of those lines; it is a protected nested class, so
+# a MultiLineEditBox subclass outside the package cannot name it.
+accessible	class	net/minecraft/client/gui/components/MultilineTextField$StringView

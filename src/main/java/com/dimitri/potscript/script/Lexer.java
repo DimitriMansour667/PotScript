@@ -8,6 +8,11 @@ import java.util.Map;
  * Tokenizer for PotScript. Newlines act as statement terminators, but only
  * outside parentheses/brackets so expressions can span lines inside calls
  * and list literals.
+ *
+ * <p>Editor tooling needs things the compiler does not: comments, every
+ * physical line break, and the source spelling of each token. Those are
+ * available through {@link #keepTrivia()}, which leaves the compiler's token
+ * stream untouched.
  */
 public final class Lexer {
 
@@ -18,10 +23,31 @@ public final class Lexer {
 		IDENT, NUMBER, STRING,
 		LET, FN, IF, ELSE, WHILE, RETURN, BREAK, CONTINUE,
 		AND, OR, NOT, TRUE, FALSE, NIL,
-		NEWLINE, EOF
+		COMMENT, NEWLINE, EOF,
+		/** Only produced by {@link #tokenizeForEditor}; never reaches the compiler. */
+		ERROR
 	}
 
-	public record Token(Type type, String text, Object literal, int line) {
+	/**
+	 * A token and where it came from. {@code text} is always the raw source
+	 * spelling — for strings that includes the quotes and the escapes as
+	 * written, so a formatter can reproduce them; the unescaped value is in
+	 * {@code literal}.
+	 *
+	 * <p>{@code start} and {@code end} are offsets into the source. Synthetic
+	 * tokens (the terminator and {@code EOF} appended by {@link #tokenize()})
+	 * are empty, so {@code start == end}.
+	 */
+	public record Token(Type type, String text, Object literal, int line, int col, int start, int end) {
+
+		public int length() {
+			return end - start;
+		}
+
+		/** False for the synthetic terminator and EOF, which have no source text. */
+		public boolean isReal() {
+			return end > start;
+		}
 	}
 
 	private static final Map<String, Type> KEYWORDS = Map.ofEntries(
@@ -46,10 +72,41 @@ public final class Lexer {
 	private int start;
 	private int current;
 	private int line = 1;
+	private int lineStart;
 	private int groupDepth;
+	private boolean keepTrivia;
 
 	public Lexer(String source) {
 		this.source = source;
+	}
+
+	/**
+	 * Emit comments and every physical newline, including the ones inside
+	 * parentheses and brackets that the compiler does not want to see.
+	 */
+	public Lexer keepTrivia() {
+		this.keepTrivia = true;
+		return this;
+	}
+
+	/**
+	 * Tokenize for editor tooling: trivia is kept and nothing is thrown. Half
+	 * a string literal is the normal state of a line you are still typing, so
+	 * a lexical error simply ends the stream with one {@link Type#ERROR} token
+	 * covering the rest of the source.
+	 */
+	public static List<Token> tokenizeForEditor(String source) {
+		Lexer lexer = new Lexer(source).keepTrivia();
+		try {
+			return lexer.tokenize();
+		} catch (ScriptError e) {
+			lexer.current = source.length();
+			lexer.add(Type.ERROR);
+			lexer.start = source.length();
+			lexer.add(Type.NEWLINE);
+			lexer.add(Type.EOF);
+			return lexer.tokens;
+		}
 	}
 
 	public List<Token> tokenize() {
@@ -57,8 +114,9 @@ public final class Lexer {
 			start = current;
 			scanToken();
 		}
-		tokens.add(new Token(Type.NEWLINE, "\n", null, line));
-		tokens.add(new Token(Type.EOF, "", null, line));
+		start = current;
+		add(Type.NEWLINE);
+		add(Type.EOF);
 		return tokens;
 	}
 
@@ -87,12 +145,14 @@ public final class Lexer {
 			}
 			case '#' -> {
 				while (!atEnd() && peek() != '\n') advance();
+				if (keepTrivia) add(Type.COMMENT);
 			}
 			case ' ', '\r', '\t' -> {
 			}
 			case '\n' -> {
-				if (groupDepth <= 0) add(Type.NEWLINE);
+				if (keepTrivia || groupDepth <= 0) add(Type.NEWLINE);
 				line++;
+				lineStart = current;
 			}
 			case '"' -> string();
 			default -> {
@@ -125,7 +185,7 @@ public final class Lexer {
 		}
 		if (atEnd()) throw new ScriptError(line, "unterminated string");
 		advance(); // closing quote
-		tokens.add(new Token(Type.STRING, sb.toString(), sb.toString(), line));
+		add(Type.STRING, sb.toString());
 	}
 
 	private void number() {
@@ -134,19 +194,21 @@ public final class Lexer {
 			advance();
 			while (isDigit(peek())) advance();
 		}
-		String text = source.substring(start, current);
-		tokens.add(new Token(Type.NUMBER, text, Double.parseDouble(text), line));
+		add(Type.NUMBER, Double.parseDouble(source.substring(start, current)));
 	}
 
 	private void identifier() {
 		while (isAlpha(peek()) || isDigit(peek())) advance();
-		String text = source.substring(start, current);
-		Type type = KEYWORDS.getOrDefault(text, Type.IDENT);
-		add(type);
+		add(KEYWORDS.getOrDefault(source.substring(start, current), Type.IDENT));
 	}
 
 	private void add(Type type) {
-		tokens.add(new Token(type, source.substring(start, current), null, line));
+		add(type, null);
+	}
+
+	private void add(Type type, Object literal) {
+		tokens.add(new Token(type, source.substring(start, current), literal,
+				line, start - lineStart + 1, start, current));
 	}
 
 	private boolean match(char expected) {

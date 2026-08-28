@@ -239,9 +239,14 @@ public final class Builtins {
 			}
 			return list;
 		});
+
+		BuiltinDocs.verifyAllRegistered(vm.globals.keySet());
 	}
 
 	private static void def(Vm vm, String name, int minArgs, int maxArgs, Vm.NativeFn fn) {
+		// The editor's completion and signature hints read BuiltinDocs, so the
+		// table has to describe exactly what actually gets registered.
+		BuiltinDocs.verifyRegistration(name, minArgs, maxArgs);
 		vm.globals.put(name, new Native(name, minArgs, maxArgs, fn));
 	}
 
