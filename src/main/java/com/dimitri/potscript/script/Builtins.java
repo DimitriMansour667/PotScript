@@ -80,6 +80,21 @@ public final class Builtins {
 			return null;
 		});
 
+		// ---- neighbor inventories ----
+		def(vm, "block", 1, 1, (v, args) -> be.blockId(asString(args[0], "block")));
+		def(vm, "inv_size", 1, 1, (v, args) -> be.invSize(asString(args[0], "inv_size")));
+		def(vm, "inv_get", 2, 2, (v, args) ->
+				be.invGet(asString(args[0], "inv_get"), (int) toNumber(args[1], "inv_get")));
+		def(vm, "inv_count", 2, 2, (v, args) ->
+				be.invCount(asString(args[0], "inv_count"), asString(args[1], "inv_count")));
+		def(vm, "inv_find", 2, 2, (v, args) ->
+				be.invFind(asString(args[0], "inv_find"), asString(args[1], "inv_find")));
+		def(vm, "inv_move", 2, 4, (v, args) -> {
+			String item = args.length > 2 && args[2] != null ? asString(args[2], "inv_move") : null;
+			long max = args.length > 3 ? (long) toNumber(args[3], "inv_move") : Long.MAX_VALUE;
+			return be.invMove(asString(args[0], "inv_move"), asString(args[1], "inv_move"), item, max);
+		});
+
 		// ---- world sensors ----
 		def(vm, "pos", 0, 0, (v, args) -> be.worldPos());
 		def(vm, "dim", 0, 0, (v, args) -> be.dimensionId());
@@ -262,6 +277,9 @@ public final class Builtins {
 				"      recv([timeout]) has_msg() peers()",
 				"redstone: rs_set(side, 0..15) rs_get(side) rs_reset()",
 				"      sides: up down north south east west",
+				"inventory: block(side) inv_size(side) inv_get(side, slot)",
+				"      inv_count(side, item) inv_find(side, item) -> slot or -1",
+				"      inv_move(from, to, [item], [max]) -> items moved",
 				"world: pos() dim() biome() weather() light()",
 				"players: players([range]) say(text, [range]) beep([pitch])",
 				"disk: store(k, v) load(k) delkey(k) keys()",

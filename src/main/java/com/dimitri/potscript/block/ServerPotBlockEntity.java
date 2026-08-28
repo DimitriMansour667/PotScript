@@ -11,15 +11,26 @@ import com.dimitri.potscript.script.ScriptFunction;
 import com.dimitri.potscript.script.Values;
 import com.dimitri.potscript.script.Vm;
 import com.mojang.serialization.Codec;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
+import net.fabricmc.fabric.api.transfer.v1.storage.StorageUtil;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -491,6 +502,87 @@ public class ServerPotBlockEntity extends BlockEntity {
 		Direction direction = sideToDirection(side, "rs_get");
 		if (level == null) return 0;
 		return level.getSignal(worldPosition.relative(direction), direction);
+	}
+
+	// ------------------------------------------------------------------ script I/O: inventories
+
+	/**
+	 * Reads go through the plain {@link Container} view (whole inventory, double
+	 * chests merged by {@link HopperBlockEntity#getContainerAt}); moves go through
+	 * the Fabric Transfer API so sided rules (furnace fuel/input/output) and
+	 * modded machines behave exactly like a hopper would.
+	 */
+	private Container containerAt(String side, String fnName) {
+		Direction direction = sideToDirection(side, fnName);
+		if (level == null) return null;
+		return HopperBlockEntity.getContainerAt(level, worldPosition.relative(direction));
+	}
+
+	private static String itemId(ItemStack stack) {
+		return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+	}
+
+	private static Item resolveItem(String itemArg, String fnName) {
+		Identifier id = Identifier.tryParse(itemArg.toLowerCase());
+		if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
+			throw new ScriptError(0, fnName + ": unknown item '" + itemArg + "'");
+		}
+		return BuiltInRegistries.ITEM.getValue(id);
+	}
+
+	public String blockId(String side) {
+		Direction direction = sideToDirection(side, "block");
+		if (level == null) return "minecraft:air";
+		return BuiltInRegistries.BLOCK.getKey(level.getBlockState(worldPosition.relative(direction)).getBlock()).toString();
+	}
+
+	public Object invSize(String side) {
+		Container container = containerAt(side, "inv_size");
+		return container == null ? null : (double) container.getContainerSize();
+	}
+
+	public Object invGet(String side, int slot) {
+		Container container = containerAt(side, "inv_get");
+		if (container == null || slot < 0 || slot >= container.getContainerSize()) return null;
+		ItemStack stack = container.getItem(slot);
+		if (stack.isEmpty()) return null;
+		ArrayList<Object> entry = new ArrayList<>(2);
+		entry.add(itemId(stack));
+		entry.add((double) stack.getCount());
+		return entry;
+	}
+
+	public double invCount(String side, String itemArg) {
+		Item item = resolveItem(itemArg, "inv_count");
+		Container container = containerAt(side, "inv_count");
+		return container == null ? 0 : container.countItem(item);
+	}
+
+	public double invFind(String side, String itemArg) {
+		Item item = resolveItem(itemArg, "inv_find");
+		Container container = containerAt(side, "inv_find");
+		if (container == null) return -1;
+		for (int slot = 0; slot < container.getContainerSize(); slot++) {
+			if (container.getItem(slot).is(item)) return slot;
+		}
+		return -1;
+	}
+
+	public double invMove(String fromSide, String toSide, String itemArg, long max) {
+		Direction from = sideToDirection(fromSide, "inv_move");
+		Direction to = sideToDirection(toSide, "inv_move");
+		if (from == to) throw new ScriptError(0, "inv_move: source and target are the same side");
+		Item item = itemArg != null ? resolveItem(itemArg, "inv_move") : null;
+		if (level == null || max <= 0) return 0;
+		Storage<ItemVariant> source = ItemStorage.SIDED.find(level, worldPosition.relative(from), from.getOpposite());
+		Storage<ItemVariant> target = ItemStorage.SIDED.find(level, worldPosition.relative(to), to.getOpposite());
+		if (source == null || target == null) return 0;
+		try (Transaction tx = Transaction.openOuter()) {
+			long moved = StorageUtil.move(source, target,
+					variant -> item == null || variant.getItem() == item, max, tx);
+			tx.commit();
+			return moved;
+		}
 	}
 
 	// ------------------------------------------------------------------ script I/O: world & players
