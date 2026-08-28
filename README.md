@@ -90,8 +90,9 @@ While a program is running, anything you type is fed to the script's `read()` �
 
 ## Documentation
 
-* **[PotScript language guide](docs/potscript.md)** — the complete reference: syntax,
-  semantics, execution model and every builtin, with worked examples.
+The full PotScript reference — quickstart, language guide, execution model, standard
+library, errors/gotchas and worked examples — lives on the
+**[project wiki](https://github.com/DimitriMansour667/PotScript/wiki)**.
 
 ## Installing
 
