@@ -1,0 +1,49 @@
+# ---- Gradle / build output ----
+.gradle/
+build/
+out/
+classes/
+bin/
+remappedSrc/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---- Fabric Loom ----
+# The dev-client working directory: worlds, logs, screenshots, downloaded assets.
+run/
+runs/
+*.mixin.out/
+
+# ---- Java / JVM crash & profiling output ----
+*.hprof
+*.log
+hs_err_pid*
+replay_pid*
+.attach_pid*
+
+# ---- IDEs ----
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+# Eclipse
+.settings/
+.classpath
+.project
+*.launch
+# VS Code
+.vscode/
+# Visual Studio
+.vs/
+*.vcxproj*
+
+# ---- Tooling ----
+.claude/
+.kotlin/
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp

@@ -1,0 +1,33 @@
+{
+	"parent": "minecraft:block/block",
+	"ambientocclusion": false,
+	"textures": {
+		"particle": "termnet:block/server_pot",
+		"tex": "termnet:block/server_pot"
+	},
+	"elements": [
+		{
+			"from": [5, 0, 5],
+			"to": [11, 6, 11],
+			"faces": {
+				"down":  { "uv": [5, 10, 11, 16], "texture": "#tex", "cullface": "down" },
+				"up":    { "uv": [5, 4, 11, 10], "texture": "#tex" },
+				"north": { "uv": [5, 10, 11, 16], "texture": "#tex" },
+				"south": { "uv": [5, 10, 11, 16], "texture": "#tex" },
+				"west":  { "uv": [5, 10, 11, 16], "texture": "#tex" },
+				"east":  { "uv": [5, 10, 11, 16], "texture": "#tex" }
+			}
+		},
+		{
+			"from": [7.5, 6, 7.5],
+			"to": [8.5, 10, 8.5],
+			"faces": {
+				"up":    { "uv": [0, 0, 1, 1], "texture": "#tex" },
+				"north": { "uv": [0, 0, 1, 4], "texture": "#tex" },
+				"south": { "uv": [0, 0, 1, 4], "texture": "#tex" },
+				"west":  { "uv": [0, 0, 1, 4], "texture": "#tex" },
+				"east":  { "uv": [0, 0, 1, 4], "texture": "#tex" }
+			}
+		}
+	]
+}

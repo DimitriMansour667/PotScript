@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "termnet",
+	"version": "${version}",
+	"name": "TermNet",
+	"description": "Pot-sized programmable server blocks with a terminal, the PotScript language and in-game wifi.",
+	"authors": [
+		"Dimitri"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.example.termnet.TermNet"
+		],
+		"client": [
+			"com.example.termnet.TermNetClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "26.2.x",
+		"java": ">=25",
+		"fabric-api": "*",
+		"owo": "*"
+	}
+}

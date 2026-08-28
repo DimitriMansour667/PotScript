@@ -1,0 +1,632 @@
+package com.example.termnet.block;
+
+import com.example.termnet.TermNet;
+import com.example.termnet.net.Packets;
+import com.example.termnet.net.TermNetwork;
+import com.example.termnet.net.TermNetNetworking;
+import com.example.termnet.script.Builtins;
+import com.example.termnet.script.Compiler;
+import com.example.termnet.script.ScriptError;
+import com.example.termnet.script.ScriptFunction;
+import com.example.termnet.script.Values;
+import com.example.termnet.script.Vm;
+import com.mojang.serialization.Codec;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * A pot-sized server. Holds the PotScript program, the terminal console, the
+ * persistent key/value disk, redstone output levels and the wifi mailbox, and
+ * pumps the VM once per tick with a bounded instruction budget.
+ */
+public class ServerPotBlockEntity extends BlockEntity {
+
+	private static final int GAS_PER_TICK = 5000;
+	private static final int CONSOLE_MAX_LINES = 200;
+	private static final int CONSOLE_MAX_COLS = 256;
+	private static final int MAILBOX_MAX = 64;
+	private static final int INPUT_QUEUE_MAX = 16;
+	private static final int MAX_CODE_LENGTH = 100_000;
+	private static final int MAX_DISK_ENTRIES = 256;
+	private static final int VIEW_RANGE = 16;
+
+	private String hostname = "pot-" + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x1000, 0xFFFF));
+	private String code = "";
+	private final ArrayDeque<String> console = new ArrayDeque<>();
+	private final LinkedHashMap<String, String> disk = new LinkedHashMap<>();
+	private final int[] outputs = new int[6];
+
+	private final ArrayDeque<ArrayList<Object>> mailbox = new ArrayDeque<>();
+	private final ArrayDeque<String> inputQueue = new ArrayDeque<>();
+	private final Set<UUID> viewers = new HashSet<>();
+	private final List<String> pendingLines = new ArrayList<>();
+
+	private Vm vm;
+	private boolean running;
+	private boolean autorun;
+	private long programStart;
+	private boolean networkRegistered;
+
+	public ServerPotBlockEntity(BlockPos pos, BlockState state) {
+		super(TermNet.SERVER_POT_BLOCK_ENTITY, pos, state);
+	}
+
+	// ------------------------------------------------------------------ ticking
+
+	public static void serverTick(ServerLevel level, BlockPos pos, BlockState state, ServerPotBlockEntity be) {
+		be.ensureRegistered(level.getServer());
+
+		if (be.running && be.vm != null) {
+			be.pumpVm();
+		} else if (be.autorun && be.vm == null) {
+			// The chunk was reloaded while a program was running: restart it.
+			be.startProgram();
+		}
+		be.flushConsole();
+	}
+
+	private void pumpVm() {
+		if (vm.status() == Vm.Status.BLOCKED) {
+			switch (vm.waitKind()) {
+				case SLEEP -> {
+					if (gameTime() >= vm.waitDeadline()) vm.resume(null);
+				}
+				case MESSAGE -> {
+					if (!mailbox.isEmpty()) vm.resume(mailbox.poll());
+					else if (vm.waitDeadline() >= 0 && gameTime() >= vm.waitDeadline()) vm.resume(null);
+				}
+				case INPUT -> {
+					if (!inputQueue.isEmpty()) vm.resume(inputQueue.poll());
+				}
+				default -> {
+				}
+			}
+		}
+		if (vm.status() != Vm.Status.RUNNING) return;
+
+		Vm.Status status = vm.run(GAS_PER_TICK);
+		if (status == Vm.Status.DONE) {
+			consolePrint("[program finished]");
+			finishProgram();
+		} else if (status == Vm.Status.ERROR) {
+			consolePrint("[error] " + vm.errorMessage());
+			finishProgram();
+		}
+	}
+
+	private void ensureRegistered(MinecraftServer server) {
+		if (networkRegistered) return;
+		if (!TermNetwork.register(server, hostname, this)) {
+			String fallback = hostname + "-" + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x100, 0xFFF));
+			consolePrint("[net] hostname '" + hostname + "' in use, now '" + fallback + "'");
+			hostname = fallback;
+			TermNetwork.register(server, hostname, this);
+			setChanged();
+			sendState();
+		}
+		networkRegistered = true;
+	}
+
+	@Override
+	public void setRemoved() {
+		super.setRemoved();
+		unregisterFromNetwork();
+	}
+
+	/** Also called from the chunk-unload event: unloaded pots must leave the wifi network. */
+	public void unregisterFromNetwork() {
+		if (level != null && !level.isClientSide() && level.getServer() != null) {
+			TermNetwork.unregister(level.getServer(), hostname, this);
+		}
+		networkRegistered = false;
+	}
+
+	// ------------------------------------------------------------------ program control
+
+	public void startProgram() {
+		if (code.isBlank()) {
+			autorun = false;
+			consolePrint("[error] no code - type 'edit' to write a program");
+			flushConsole();
+			return;
+		}
+		ScriptFunction main;
+		try {
+			main = Compiler.compile(code);
+		} catch (ScriptError e) {
+			autorun = false;
+			consolePrint("[compile error] " + e.display());
+			flushConsole();
+			return;
+		}
+		vm = new Vm(main);
+		Builtins.install(vm, this);
+		running = true;
+		autorun = true;
+		programStart = gameTime();
+		setChanged();
+		consolePrint("[running]");
+		sendState();
+	}
+
+	public void stopProgram() {
+		if (!running) return;
+		consolePrint("[stopped]");
+		finishProgram();
+	}
+
+	private void finishProgram() {
+		vm = null;
+		running = false;
+		autorun = false;
+		setChanged();
+		sendState();
+	}
+
+	public boolean isRunning() {
+		return running;
+	}
+
+	public long programUptime() {
+		return running ? gameTime() - programStart : 0;
+	}
+
+	// ------------------------------------------------------------------ terminal
+
+	public void openTerminal(ServerPlayer player) {
+		viewers.add(player.getUUID());
+		TermNetNetworking.CHANNEL.serverHandle(player).send(
+				new Packets.OpenTerminal(worldPosition, hostname, code, List.copyOf(console), running));
+	}
+
+	public void closeTerminal(ServerPlayer player) {
+		viewers.remove(player.getUUID());
+	}
+
+	public void handleInput(ServerPlayer player, String line) {
+		line = line.strip();
+		if (line.length() > CONSOLE_MAX_COLS) line = line.substring(0, CONSOLE_MAX_COLS);
+		if (line.isEmpty()) return;
+
+		consolePrint("> " + line);
+		if (running) {
+			if (line.equals("stop")) {
+				stopProgram();
+			} else if (inputQueue.size() < INPUT_QUEUE_MAX) {
+				inputQueue.add(line);
+			} else {
+				consolePrint("[error] input queue full");
+			}
+		} else {
+			shellCommand(line);
+		}
+		flushConsole();
+	}
+
+	public void setCode(String newCode, boolean andRun) {
+		if (newCode.length() > MAX_CODE_LENGTH) {
+			consolePrint("[error] code too long");
+			flushConsole();
+			return;
+		}
+		this.code = newCode;
+		setChanged();
+		if (andRun) {
+			if (running) stopProgram();
+			startProgram();
+		} else {
+			consolePrint("[saved " + newCode.length() + " chars]");
+		}
+		flushConsole();
+	}
+
+	private void shellCommand(String line) {
+		String[] parts = line.split("\\s+", 2);
+		String cmd = parts[0].toLowerCase();
+		String arg = parts.length > 1 ? parts[1].strip() : "";
+
+		switch (cmd) {
+			case "help" -> {
+				if (arg.equals("lang")) {
+					Builtins.cheatsheet().forEach(this::consolePrint);
+				} else {
+					consolePrint("commands:");
+					consolePrint("  run           compile & run the program");
+					consolePrint("  stop          stop the running program");
+					consolePrint("  edit          open the code editor");
+					consolePrint("  cat           print the program code");
+					consolePrint("  hostname [h]  show or set this pot's hostname");
+					consolePrint("  scan          list hosts on the wifi network");
+					consolePrint("  ls            list stored disk keys");
+					consolePrint("  rm <key>      delete a disk key");
+					consolePrint("  clear         clear the console");
+					consolePrint("  reboot        stop, clear console & redstone");
+					consolePrint("  help lang     PotScript language reference");
+					consolePrint("while running, typed lines are fed to read(); 'stop' halts");
+				}
+			}
+			case "run" -> startProgram();
+			case "stop" -> consolePrint("no program is running");
+			case "cat" -> {
+				if (code.isBlank()) consolePrint("(no code)");
+				else code.lines().limit(CONSOLE_MAX_LINES).forEach(this::consolePrint);
+			}
+			case "hostname" -> {
+				if (arg.isEmpty()) {
+					consolePrint(hostname);
+				} else if (trySetHostname(arg)) {
+					consolePrint("hostname set to '" + hostname + "'");
+				} else {
+					consolePrint("[error] invalid or taken hostname (a-z, 0-9, '-', '_', max 16 chars)");
+				}
+			}
+			case "scan" -> {
+				List<String> hosts = netPeers();
+				consolePrint(hosts.size() + " host(s) online:");
+				for (String host : hosts) {
+					consolePrint("  " + host + (host.equals(hostname) ? " (this pot)" : ""));
+				}
+			}
+			case "ls" -> {
+				if (disk.isEmpty()) consolePrint("(disk is empty)");
+				else disk.forEach((k, v) -> consolePrint("  " + k + " = " + abbreviate(v)));
+			}
+			case "rm" -> {
+				if (disk.remove(arg) != null) {
+					setChanged();
+					consolePrint("deleted '" + arg + "'");
+				} else {
+					consolePrint("[error] no such key '" + arg + "'");
+				}
+			}
+			case "clear" -> consoleClear();
+			case "reboot" -> {
+				if (running) stopProgram();
+				rsReset();
+				consoleClear();
+				consolePrint("TermNet OS - '" + hostname + "' ready. Type 'help'.");
+			}
+			default -> consolePrint("[error] unknown command '" + cmd + "' - type 'help'");
+		}
+	}
+
+	private static String abbreviate(String value) {
+		return value.length() > 40 ? value.substring(0, 40) + "..." : value;
+	}
+
+	// ------------------------------------------------------------------ console
+
+	public void consolePrint(String text) {
+		for (String raw : text.split("\n", -1)) {
+			while (raw.length() > CONSOLE_MAX_COLS) {
+				addConsoleLine(raw.substring(0, CONSOLE_MAX_COLS));
+				raw = raw.substring(CONSOLE_MAX_COLS);
+			}
+			addConsoleLine(raw);
+		}
+	}
+
+	private void addConsoleLine(String line) {
+		console.add(line);
+		while (console.size() > CONSOLE_MAX_LINES) console.poll();
+		pendingLines.add(line);
+	}
+
+	public void consoleClear() {
+		console.clear();
+		pendingLines.clear();
+		forEachViewer(player -> TermNetNetworking.CHANNEL.serverHandle(player).send(new Packets.ConsoleClear(worldPosition)));
+	}
+
+	private void flushConsole() {
+		if (pendingLines.isEmpty()) return;
+		List<String> lines = List.copyOf(pendingLines);
+		pendingLines.clear();
+		forEachViewer(player -> TermNetNetworking.CHANNEL.serverHandle(player).send(new Packets.ConsoleAppend(worldPosition, lines)));
+	}
+
+	private void sendState() {
+		forEachViewer(player -> TermNetNetworking.CHANNEL.serverHandle(player).send(new Packets.TerminalState(worldPosition, running, hostname)));
+	}
+
+	private void forEachViewer(java.util.function.Consumer<ServerPlayer> action) {
+		if (viewers.isEmpty() || level == null || level.isClientSide() || level.getServer() == null) return;
+		viewers.removeIf(uuid -> {
+			ServerPlayer player = level.getServer().getPlayerList().getPlayer(uuid);
+			if (player == null || player.level() != level
+					|| player.distanceToSqr(worldPosition.getX() + 0.5, worldPosition.getY() + 0.5, worldPosition.getZ() + 0.5) > VIEW_RANGE * VIEW_RANGE) {
+				return true;
+			}
+			action.accept(player);
+			return false;
+		});
+	}
+
+	// ------------------------------------------------------------------ script I/O: wifi
+
+	public String hostname() {
+		return hostname;
+	}
+
+	public boolean trySetHostname(String name) {
+		name = name.toLowerCase();
+		if (!name.matches("[a-z0-9_-]{1,16}")) return false;
+		if (name.equals(hostname)) return true;
+		if (level == null || level.getServer() == null) return false;
+		ServerPotBlockEntity taken = TermNetwork.lookup(level.getServer(), name);
+		if (taken != null && taken != this) return false;
+		TermNetwork.unregister(level.getServer(), hostname, this);
+		hostname = name;
+		TermNetwork.register(level.getServer(), hostname, this);
+		setChanged();
+		sendState();
+		return true;
+	}
+
+	public boolean netSend(String host, Object payload) {
+		if (level == null || level.getServer() == null) return false;
+		ServerPotBlockEntity target = TermNetwork.lookup(level.getServer(), host);
+		if (target == null) return false;
+		return target.deliver(hostname, payload);
+	}
+
+	public int netBroadcast(Object payload) {
+		if (level == null || level.getServer() == null) return 0;
+		int delivered = 0;
+		for (String host : TermNetwork.hostnames(level.getServer())) {
+			if (host.equals(hostname)) continue;
+			ServerPotBlockEntity target = TermNetwork.lookup(level.getServer(), host);
+			if (target != null && target.deliver(hostname, payload)) delivered++;
+		}
+		return delivered;
+	}
+
+	public List<String> netPeers() {
+		if (level == null || level.getServer() == null) return List.of();
+		return TermNetwork.hostnames(level.getServer());
+	}
+
+	private boolean deliver(String from, Object payload) {
+		if (mailbox.size() >= MAILBOX_MAX) return false;
+		ArrayList<Object> message = new ArrayList<>(2);
+		message.add(from);
+		message.add(copyPayload(payload, 0));
+		mailbox.add(message);
+		return true;
+	}
+
+	/** Deep-copies a message payload so sender and receiver never share mutable state. */
+	private static Object copyPayload(Object value, int depth) {
+		if (depth > 8) throw new ScriptError(0, "send: message nested too deep");
+		return switch (value) {
+			case null -> null;
+			case Double d -> d;
+			case String s -> s;
+			case Boolean b -> b;
+			case ArrayList<?> list -> {
+				ArrayList<Object> copy = new ArrayList<>(list.size());
+				for (Object element : list) copy.add(copyPayload(element, depth + 1));
+				yield copy;
+			}
+			default -> throw new ScriptError(0, "send: cannot send a " + Values.typeName(value));
+		};
+	}
+
+	public boolean hasMessage() {
+		return !mailbox.isEmpty();
+	}
+
+	public ArrayList<Object> pollMessage() {
+		return mailbox.poll();
+	}
+
+	public String pollInput() {
+		return inputQueue.poll();
+	}
+
+	// ------------------------------------------------------------------ script I/O: redstone
+
+	private static Direction sideToDirection(String side, String fnName) {
+		Direction direction = Direction.byName(side.toLowerCase());
+		if (direction == null) {
+			throw new ScriptError(0, fnName + ": unknown side '" + side + "' (use up/down/north/south/east/west)");
+		}
+		return direction;
+	}
+
+	public void rsSet(String side, int emittedLevel) {
+		Direction direction = sideToDirection(side, "rs_set");
+		if (outputs[direction.get3DDataValue()] == emittedLevel) return;
+		outputs[direction.get3DDataValue()] = emittedLevel;
+		setChanged();
+		notifyRedstone();
+	}
+
+	public void rsReset() {
+		boolean changed = false;
+		for (int i = 0; i < outputs.length; i++) {
+			if (outputs[i] != 0) {
+				outputs[i] = 0;
+				changed = true;
+			}
+		}
+		if (changed) {
+			setChanged();
+			notifyRedstone();
+		}
+	}
+
+	private void notifyRedstone() {
+		if (level == null) return;
+		level.updateNeighborsAt(worldPosition, getBlockState().getBlock(), null);
+		for (Direction direction : Direction.values()) {
+			level.updateNeighborsAt(worldPosition.relative(direction), getBlockState().getBlock(), null);
+		}
+	}
+
+	public int outputSignal(Direction towardNeighbor) {
+		return outputs[towardNeighbor.get3DDataValue()];
+	}
+
+	public int rsGet(String side) {
+		Direction direction = sideToDirection(side, "rs_get");
+		if (level == null) return 0;
+		return level.getSignal(worldPosition.relative(direction), direction);
+	}
+
+	// ------------------------------------------------------------------ script I/O: world & players
+
+	public long gameTime() {
+		return level != null ? level.getGameTime() : 0;
+	}
+
+	public long dayTime() {
+		return level != null ? level.getOverworldClockTime() : 0;
+	}
+
+	public ArrayList<Object> worldPos() {
+		ArrayList<Object> position = new ArrayList<>(3);
+		position.add((double) worldPosition.getX());
+		position.add((double) worldPosition.getY());
+		position.add((double) worldPosition.getZ());
+		return position;
+	}
+
+	public String dimensionId() {
+		return level != null ? level.dimension().identifier().toString() : "unknown";
+	}
+
+	public String biomeId() {
+		if (level == null) return "unknown";
+		return level.getBiome(worldPosition).unwrapKey()
+				.map(key -> key.identifier().toString())
+				.orElse("unknown");
+	}
+
+	public String weatherName() {
+		if (level == null) return "clear";
+		if (level.isThundering()) return "thunder";
+		if (level.isRaining()) return "rain";
+		return "clear";
+	}
+
+	public int lightLevel() {
+		return level != null ? level.getRawBrightness(worldPosition.above(), 0) : 0;
+	}
+
+	public ArrayList<Object> nearbyPlayerNames(double range) {
+		ArrayList<Object> names = new ArrayList<>();
+		for (ServerPlayer player : playersWithin(range)) {
+			names.add(player.getGameProfile().name());
+		}
+		return names;
+	}
+
+	public int sayToPlayers(String text, double range) {
+		if (text.length() > CONSOLE_MAX_COLS) text = text.substring(0, CONSOLE_MAX_COLS);
+		int count = 0;
+		for (ServerPlayer player : playersWithin(range)) {
+			player.sendSystemMessage(Component.literal("<" + hostname + "> " + text));
+			count++;
+		}
+		return count;
+	}
+
+	private List<ServerPlayer> playersWithin(double range) {
+		List<ServerPlayer> result = new ArrayList<>();
+		if (!(level instanceof ServerLevel serverLevel)) return result;
+		double rangeSq = range * range;
+		for (ServerPlayer player : serverLevel.players()) {
+			if (player.distanceToSqr(worldPosition.getX() + 0.5, worldPosition.getY() + 0.5, worldPosition.getZ() + 0.5) <= rangeSq) {
+				result.add(player);
+			}
+		}
+		return result;
+	}
+
+	public void beep(int note) {
+		if (level == null) return;
+		float pitch = (float) Math.pow(2.0, (note - 12) / 12.0);
+		level.playSound(null, worldPosition.getX() + 0.5, worldPosition.getY() + 0.5, worldPosition.getZ() + 0.5,
+				SoundEvents.NOTE_BLOCK_BIT.value(), SoundSource.BLOCKS, 0.8f, pitch);
+	}
+
+	// ------------------------------------------------------------------ script I/O: disk
+
+	public void diskStore(String key, String value) {
+		if (key.length() > 64) throw new ScriptError(0, "store: key too long (max 64)");
+		if (value.length() > 4096) throw new ScriptError(0, "store: value too long (max 4096)");
+		if (!disk.containsKey(key) && disk.size() >= MAX_DISK_ENTRIES) {
+			throw new ScriptError(0, "store: disk full (max " + MAX_DISK_ENTRIES + " keys)");
+		}
+		disk.put(key, value);
+		setChanged();
+	}
+
+	public String diskLoad(String key) {
+		return disk.get(key);
+	}
+
+	public boolean diskDelete(String key) {
+		boolean removed = disk.remove(key) != null;
+		if (removed) setChanged();
+		return removed;
+	}
+
+	public List<String> diskKeys() {
+		return List.copyOf(disk.keySet());
+	}
+
+	// ------------------------------------------------------------------ persistence
+
+	@Override
+	protected void saveAdditional(ValueOutput out) {
+		super.saveAdditional(out);
+		out.putString("hostname", hostname);
+		out.putString("code", code);
+		out.putBoolean("autorun", autorun || running);
+		out.putIntArray("outputs", outputs.clone());
+		out.store("console", Codec.STRING.listOf(), List.copyOf(console));
+		out.store("disk_keys", Codec.STRING.listOf(), List.copyOf(disk.keySet()));
+		out.store("disk_values", Codec.STRING.listOf(), List.copyOf(disk.values()));
+	}
+
+	@Override
+	protected void loadAdditional(ValueInput in) {
+		super.loadAdditional(in);
+		hostname = in.getStringOr("hostname", hostname);
+		code = in.getStringOr("code", "");
+		autorun = in.getBooleanOr("autorun", false);
+		int[] savedOutputs = in.getIntArray("outputs").orElse(null);
+		if (savedOutputs != null && savedOutputs.length == 6) {
+			System.arraycopy(savedOutputs, 0, outputs, 0, 6);
+		}
+		console.clear();
+		console.addAll(in.read("console", Codec.STRING.listOf()).orElse(List.of()));
+		disk.clear();
+		List<String> keys = in.read("disk_keys", Codec.STRING.listOf()).orElse(List.of());
+		List<String> values = in.read("disk_values", Codec.STRING.listOf()).orElse(List.of());
+		for (int i = 0; i < Math.min(keys.size(), values.size()); i++) {
+			disk.put(keys.get(i), values.get(i));
+		}
+	}
+}
