@@ -21,7 +21,7 @@ loom {
 	splitEnvironmentSourceSets()
 
 	mods {
-		"termnet" {
+		"potscript" {
 			sourceSet sourceSets.main
 			sourceSet sourceSets.client
 		}

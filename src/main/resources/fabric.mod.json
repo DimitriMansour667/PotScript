@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
-	"id": "termnet",
+	"id": "potscript",
 	"version": "${version}",
-	"name": "TermNet",
+	"name": "PotScript",
 	"description": "Pot-sized programmable server blocks with a terminal, the PotScript language and in-game wifi.",
 	"authors": [
 		"Dimitri"
@@ -12,10 +12,10 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.termnet.TermNet"
+			"com.dimitri.potscript.PotScript"
 		],
 		"client": [
-			"com.example.termnet.TermNetClient"
+			"com.dimitri.potscript.PotScriptClient"
 		]
 	},
 	"depends": {

@@ -1,7 +1,7 @@
-# PotScript — the TermNet Language
+# PotScript
 
 PotScript is the scripting language that runs inside a **Server Pot**, the flower-pot-sized
-computer added by TermNet. A pot holds one program, a 200-line console, a persistent
+computer added by the PotScript mod. A pot holds one program, a 200-line console, a persistent
 key/value disk, six redstone outputs and a wifi mailbox. The program runs on the server
 thread in a metered bytecode VM, so it can loop forever, sleep, wait for messages and drive
 redstone without ever stalling the game.
@@ -12,7 +12,7 @@ This document covers the whole language and every builtin.
 
 ## 1. Quickstart
 
-1. Place a **Server Pot** (creative tab *TermNet*, or break/craft the block item).
+1. Place a **Server Pot** (creative tab *PotScript*, or break/craft the block item).
 2. Right-click it to open the terminal.
 3. Type `edit` (or click **Edit**) to open the code editor.
 4. Paste a program and click **Save & Run**.

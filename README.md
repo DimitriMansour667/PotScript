@@ -1,4 +1,4 @@
-# TermNet
+# PotScript
 
 **Pot-sized programmable servers for Minecraft.** A Server Pot is a block the size of a
 flower pot that runs your own programs, written in **PotScript**, a small language built for
@@ -61,10 +61,10 @@ if target == nil {
 
 ## Getting a pot
 
-The **Server Pot** is in the *TermNet* creative tab, or:
+The **Server Pot** is in the *PotScript* creative tab, or:
 
 ```
-/give @s termnet:server_pot
+/give @s potscript:server_pot
 ```
 
 It drops itself when broken — but the program, console and disk stay with the block, so
@@ -122,8 +122,8 @@ The toolchain is pinned in `mise.toml` (Temurin 25, Gradle 9.5.1); if you use
 ## Project layout
 
 ```
-src/main/java/com/example/termnet/
-├── TermNet.java                    registration: block, item, block entity, creative tab
+src/main/java/com/dimitri/potscript/
+├── PotScript.java                    registration: block, item, block entity, creative tab
 ├── block/ServerPotBlock.java       the block: shape, right-click, redstone source
 ├── block/ServerPotBlockEntity.java the machine: console, disk, mailbox, VM scheduler
 ├── net/                            client ↔ server packets and the hostname registry
@@ -135,7 +135,7 @@ src/main/java/com/example/termnet/
     ├── Builtins.java               the standard library
     └── Values.java / ScriptError.java
 
-src/client/java/com/example/termnet/
+src/client/java/com/dimitri/potscript/
 └── client/TerminalScreen.java      the terminal UI (owo-lib)
 ```
 
