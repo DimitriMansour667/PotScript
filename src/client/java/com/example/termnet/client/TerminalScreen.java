@@ -77,6 +77,13 @@ public class TerminalScreen extends BaseOwoScreen<FlowLayout> {
 	}
 
 	@Override
+	public boolean isPauseScreen() {
+		// The pot keeps ticking (and other players keep playing) while the
+		// terminal is open, so this must not pause the single-player world.
+		return false;
+	}
+
+	@Override
 	protected void build(FlowLayout rootComponent) {
 		rootComponent
 				.surface(Surface.VANILLA_TRANSLUCENT)
