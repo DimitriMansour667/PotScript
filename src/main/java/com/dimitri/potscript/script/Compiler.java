@@ -91,6 +91,7 @@ public final class Compiler {
 		else if (match(Type.FN)) fnStatement();
 		else if (match(Type.IF)) ifStatement();
 		else if (match(Type.WHILE)) whileStatement();
+		else if (match(Type.FOR)) forStatement();
 		else if (match(Type.RETURN)) returnStatement();
 		else if (match(Type.BREAK)) breakStatement();
 		else if (match(Type.CONTINUE)) continueStatement();
@@ -211,6 +212,73 @@ public final class Compiler {
 
 		for (int jump : loop.breakJumps) patchJump(jump);
 		func.loops.removeLast();
+	}
+
+	/**
+	 * {@code for x in iterable { body }} desugars to an index walk over two
+	 * hidden locals (the iterable and a counter). The counter increments at the
+	 * loop start so 'continue' lands on it; length is re-checked every pass, so
+	 * a body that shrinks the list never reads out of range.
+	 */
+	private void forStatement() {
+		Token name = consume(Type.IDENT, "expected a loop variable after 'for'");
+		consume(Type.IN, "expected 'in' after the loop variable");
+
+		beginScope();
+		expression(); // the iterable, living in a hidden slot
+		int iterSlot = hiddenLocal(name, " for-iter");
+		emit(Op.CONST);
+		emit(constant(-1.0)); // counter, pre-incremented each pass
+		int indexSlot = hiddenLocal(name, " for-index");
+
+		int loopStart = chunk().size();
+		LoopCtx loop = new LoopCtx(loopStart, func.scopeDepth);
+		func.loops.add(loop);
+
+		// index = index + 1
+		emit(Op.GET_LOCAL);
+		emit(indexSlot);
+		emit(Op.CONST);
+		emit(constant(1.0));
+		emit(Op.ADD);
+		emit(Op.SET_LOCAL);
+		emit(indexSlot);
+		emit(Op.POP);
+
+		// while index < len(iterable)
+		emit(Op.GET_LOCAL);
+		emit(indexSlot);
+		emit(Op.GET_LOCAL);
+		emit(iterSlot);
+		emit(Op.LEN);
+		emit(Op.LESS);
+		int exitJump = emitJump(Op.JUMP_IF_FALSE);
+
+		consume(Type.LBRACE, "expected '{' after the for header");
+		beginScope();
+		// let x = iterable[index]
+		emit(Op.GET_LOCAL);
+		emit(iterSlot);
+		emit(Op.GET_LOCAL);
+		emit(indexSlot);
+		emit(Op.INDEX_GET);
+		defineVariable(name);
+		blockBody();
+		endScope();
+		emit(Op.JUMP);
+		emit(loopStart);
+		patchJump(exitJump);
+
+		for (int jump : loop.breakJumps) patchJump(jump);
+		func.loops.removeLast();
+		endScope();
+	}
+
+	/** Declares a local the program cannot name (the space keeps it unspeakable). */
+	private int hiddenLocal(Token at, String name) {
+		if (func.locals.size() >= MAX_LOCALS) throw error(at, "too many local variables");
+		func.locals.add(new Local(name, func.scopeDepth));
+		return func.locals.size() - 1;
 	}
 
 	private void returnStatement() {

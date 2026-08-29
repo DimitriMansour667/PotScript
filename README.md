@@ -11,7 +11,17 @@ that reaches every other pot on the server.
 
 ## Getting a pot
 
-The **Server Pot** is in the *PotScript* creative tab, or:
+The **Server Pot** is craftable in survival — a flower pot ringed with iron, with a quartz
+"CPU" and redstone on top:
+
+```
+quartz   redstone  quartz
+iron     flowerpot iron
+iron     iron      iron
+```
+
+The **Memory Card** is a quartz, a redstone and an iron nugget in a column. Both are also in
+the *PotScript* creative tab, or:
 
 ```
 /give @s potscript:server_pot

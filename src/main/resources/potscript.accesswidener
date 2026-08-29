@@ -7,3 +7,10 @@ accessWidener	v2	official
 # the record describing one of those lines; it is a protected nested class, so
 # a MultiLineEditBox subclass outside the package cannot name it.
 accessible	class	net/minecraft/client/gui/components/MultilineTextField$StringView
+
+# The pot's display() builtin puts a floating text display entity above the
+# block. TextDisplay's state setters are private (vanilla only drives them
+# from NBT), so widen the ones the hologram needs.
+accessible	method	net/minecraft/world/entity/Display$TextDisplay	setText	(Lnet/minecraft/network/chat/Component;)V
+accessible	method	net/minecraft/world/entity/Display$TextDisplay	setBackgroundColor	(I)V
+accessible	method	net/minecraft/world/entity/Display	setBillboardConstraints	(Lnet/minecraft/world/entity/Display$BillboardConstraints;)V

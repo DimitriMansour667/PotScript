@@ -50,6 +50,15 @@ public final class PotScriptNetwork {
 		return be == null || be.isRemoved() ? null : be;
 	}
 
+	/** Every loaded pot, for events that fan out to all of them (e.g. overheard chat). */
+	public static List<ServerPotBlockEntity> pots(MinecraftServer server) {
+		List<ServerPotBlockEntity> pots = new ArrayList<>();
+		network(server).values().forEach(be -> {
+			if (!be.isRemoved()) pots.add(be);
+		});
+		return pots;
+	}
+
 	public static List<String> hostnames(MinecraftServer server) {
 		List<String> names = new ArrayList<>();
 		network(server).forEach((name, be) -> {

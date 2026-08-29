@@ -22,7 +22,7 @@ public final class EditorSupport {
 
 	/** Words the lexer treats as keywords, offered by completion. */
 	public static final List<String> KEYWORDS = List.of(
-			"let", "fn", "if", "else", "while", "return", "break", "continue",
+			"let", "fn", "if", "else", "while", "for", "in", "return", "break", "continue",
 			"and", "or", "not", "true", "false", "nil"
 	);
 

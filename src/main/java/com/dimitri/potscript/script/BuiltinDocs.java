@@ -84,12 +84,14 @@ public final class BuiltinDocs {
 		doc("peers", "", 0, 0, "list", "Sorted hostnames of all reachable pots, including this one.");
 		doc("has_msg", "", 0, 0, "bool", "Whether a message is waiting.");
 		doc("recv", "[timeout]", 0, 1, "list", "Blocks for a message, up to timeout ticks; nil on timeout. Yields [sender, payload].");
+		doc("ping", "host", 1, 1, "bool", "Whether that hostname is reachable on the wifi network right now.");
 
 		// ---- redstone ----
 		doc("rs_set", "side, level", 2, 2, "nil", "Emit level (clamped 0-15) out of that side, weak and strong.");
 		doc("rs_pulse", "side, level, [ticks]", 2, 3, "nil", "Emit level out of that side for ticks game ticks (default 2), then drop to 0.");
 		doc("rs_get", "side", 1, 1, "number", "The redstone signal the neighbour on that side feeds into the pot.");
 		doc("rs_reset", "", 0, 0, "nil", "Set all six outputs to 0.");
+		doc("rs_wait", "[timeout]", 0, 1, "list", "Blocks until any incoming signal changes, up to timeout ticks. Yields [side, level]; nil on timeout.");
 
 		// ---- neighbor inventories ----
 		doc("block", "side", 1, 1, "string", "Registry id of the block on that side, e.g. \"minecraft:chest\".");
@@ -109,12 +111,17 @@ public final class BuiltinDocs {
 		doc("biome", "", 0, 0, "string", "Biome id, e.g. \"minecraft:plains\".");
 		doc("weather", "", 0, 0, "string", "\"clear\", \"rain\" or \"thunder\".");
 		doc("light", "", 0, 0, "number", "Light level (0-15) of the block directly above the pot.");
+		doc("moon", "", 0, 0, "number", "Moon phase 0-7; 0 is the full moon.");
 
 		// ---- players & sound ----
 		doc("players", "[range]", 0, 1, "list", "Names of players within range blocks (default 16, clamped 0-64).");
 		doc("entities", "[range]", 0, 1, "list", "[type, name, distance] per living entity within range blocks (default 8, clamped 0-32), nearest first, max 32.");
 		doc("say", "text, [range]", 1, 2, "number", "Sends \"<hostname> text\" to nearby chat; returns how many were reached.");
 		doc("beep", "[pitch]", 0, 1, "nil", "Plays a note block \"bit\" sound. pitch is a semitone 0-24, default 12.");
+		doc("tone", "instrument, note", 2, 2, "nil", "Plays any note-block instrument (see instruments()) at semitone note 0-24.");
+		doc("instruments", "", 0, 0, "list", "Every instrument name tone() accepts.");
+		doc("hear", "[timeout]", 0, 1, "list", "Blocks until a player chats within 16 blocks, up to timeout ticks. Yields [player, text]; nil on timeout.");
+		doc("display", "[text]", 0, 1, "nil", "Floats text above the pot as a hologram. Empty or no text takes it down.");
 
 		// ---- persistent storage ----
 		doc("store", "key, value", 2, 2, "nil", "Writes to the disk. Values are stringified.");
@@ -133,6 +140,12 @@ public final class BuiltinDocs {
 		doc("pow", "a, b", 2, 2, "number", "a to the power b.");
 		doc("min", "a, b", 2, 2, "number", "The smaller of two numbers.");
 		doc("max", "a, b", 2, 2, "number", "The larger of two numbers.");
+		doc("clamp", "x, lo, hi", 3, 3, "number", "x limited to [lo, hi]. Errors if hi < lo.");
+		doc("sin", "x", 1, 1, "number", "Sine, in radians.");
+		doc("cos", "x", 1, 1, "number", "Cosine, in radians.");
+		doc("tan", "x", 1, 1, "number", "Tangent, in radians.");
+		doc("atan2", "y, x", 2, 2, "number", "The angle of the vector (x, y), in radians.");
+		doc("pi", "", 0, 0, "number", "3.14159..., for the trig functions.");
 
 		// ---- values & conversion ----
 		doc("len", "x", 1, 1, "number", "Length of a string or list. Errors on anything else.");
@@ -148,6 +161,10 @@ public final class BuiltinDocs {
 		doc("join", "list, sep", 2, 2, "string", "Joins stringified elements with sep.");
 		doc("sub", "s, from, [to]", 2, 3, "string", "Substring; both bounds are clamped, so it never errors.");
 		doc("find", "haystack, needle", 2, 2, "number", "Index of the first match in a list or string, or -1.");
+		doc("replace", "s, old, new", 3, 3, "string", "Every occurrence of old swapped for new. Errors if old is empty.");
+		doc("starts", "s, prefix", 2, 2, "bool", "Whether s begins with prefix.");
+		doc("ends", "s, suffix", 2, 2, "bool", "Whether s ends with suffix.");
+		doc("repeat", "s, n", 2, 2, "string", "s concatenated n times.");
 		doc("chr", "n", 1, 1, "string", "The character with code n.");
 		doc("ord", "s", 1, 1, "number", "Code of the first character. Errors on an empty string.");
 
@@ -155,6 +172,11 @@ public final class BuiltinDocs {
 		doc("push", "list, value", 2, 2, "list", "Appends and returns the same list, so calls chain.");
 		doc("pop", "list", 1, 1, "value", "Removes and returns the last element. Errors when empty.");
 		doc("remove", "list, i", 2, 2, "value", "Removes and returns index i; negative counts from the end.");
+		doc("insert", "list, i, value", 3, 3, "list", "Inserts before index i (negative counts from the end); returns the same list.");
+		doc("sort", "list", 1, 1, "list", "Sorts in place, ascending; all numbers or all strings. Returns the same list.");
+		doc("reverse", "list", 1, 1, "list", "Reverses in place and returns the same list.");
+		doc("slice", "list, from, [to]", 2, 3, "list", "A new list of [from, to); both bounds are clamped, so it never errors.");
+		doc("contains", "x, value", 2, 2, "bool", "Whether a list has an equal element, or a string a substring.");
 		doc("range", "[from,] to", 1, 2, "list", "[from, from+1, ..., to-1]; from defaults to 0, to is exclusive.");
 	}
 

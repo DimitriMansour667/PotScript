@@ -5,6 +5,8 @@ import com.dimitri.potscript.script.Vm.Native;
 import com.dimitri.potscript.script.Vm.WaitKind;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -68,6 +70,7 @@ public final class Builtins {
 			v.park(WaitKind.MESSAGE, deadline);
 			return Vm.BLOCK;
 		});
+		def(vm, "ping", 1, 1, (v, args) -> be.netOnline(asString(args[0], "ping")));
 
 		// ---- redstone ----
 		def(vm, "rs_set", 2, 2, (v, args) -> {
@@ -85,6 +88,13 @@ public final class Builtins {
 		def(vm, "rs_reset", 0, 0, (v, args) -> {
 			be.rsReset();
 			return null;
+		});
+		def(vm, "rs_wait", 0, 1, (v, args) -> {
+			long deadline = -1;
+			if (args.length == 1) deadline = be.gameTime() + (long) toNumber(args[0], "rs_wait");
+			be.rsWaitBegin();
+			v.park(WaitKind.REDSTONE, deadline);
+			return Vm.BLOCK;
 		});
 
 		// ---- neighbor inventories ----
@@ -121,6 +131,7 @@ public final class Builtins {
 		def(vm, "biome", 0, 0, (v, args) -> be.biomeId());
 		def(vm, "weather", 0, 0, (v, args) -> be.weatherName());
 		def(vm, "light", 0, 0, (v, args) -> (double) be.lightLevel());
+		def(vm, "moon", 0, 0, (v, args) -> (double) be.moonPhase());
 
 		// ---- players & sound ----
 		def(vm, "players", 0, 1, (v, args) -> {
@@ -138,6 +149,25 @@ public final class Builtins {
 		def(vm, "beep", 0, 1, (v, args) -> {
 			double pitch = args.length > 0 ? toNumber(args[0], "beep") : 12;
 			be.beep((int) Math.clamp(pitch, 0, 24));
+			return null;
+		});
+		def(vm, "tone", 2, 2, (v, args) -> {
+			int note = (int) Math.clamp(toNumber(args[1], "tone"), 0, 24);
+			be.playTone(asString(args[0], "tone"), note);
+			return null;
+		});
+		def(vm, "instruments", 0, 0, (v, args) -> ServerPotBlockEntity.toneInstruments());
+		def(vm, "hear", 0, 1, (v, args) -> {
+			Object heard = be.pollChat();
+			if (heard != null) return heard;
+			long deadline = -1;
+			if (args.length == 1) deadline = be.gameTime() + (long) toNumber(args[0], "hear");
+			v.park(WaitKind.CHAT, deadline);
+			return Vm.BLOCK;
+		});
+		def(vm, "display", 0, 1, (v, args) -> {
+			if (args.length == 0) be.displayClear();
+			else be.displaySet(Values.stringify(args[0]));
 			return null;
 		});
 
@@ -166,6 +196,17 @@ public final class Builtins {
 		def(vm, "pow", 2, 2, (v, args) -> Math.pow(toNumber(args[0], "pow"), toNumber(args[1], "pow")));
 		def(vm, "min", 2, 2, (v, args) -> Math.min(toNumber(args[0], "min"), toNumber(args[1], "min")));
 		def(vm, "max", 2, 2, (v, args) -> Math.max(toNumber(args[0], "max"), toNumber(args[1], "max")));
+		def(vm, "clamp", 3, 3, (v, args) -> {
+			double lo = toNumber(args[1], "clamp");
+			double hi = toNumber(args[2], "clamp");
+			if (hi < lo) throw new ScriptError(0, "clamp: max is below min");
+			return Math.clamp(toNumber(args[0], "clamp"), lo, hi);
+		});
+		def(vm, "sin", 1, 1, (v, args) -> Math.sin(toNumber(args[0], "sin")));
+		def(vm, "cos", 1, 1, (v, args) -> Math.cos(toNumber(args[0], "cos")));
+		def(vm, "tan", 1, 1, (v, args) -> Math.tan(toNumber(args[0], "tan")));
+		def(vm, "atan2", 2, 2, (v, args) -> Math.atan2(toNumber(args[0], "atan2"), toNumber(args[1], "atan2")));
+		def(vm, "pi", 0, 0, (v, args) -> Math.PI);
 
 		// ---- values, strings, lists ----
 		def(vm, "len", 1, 1, (v, args) -> switch (args[0]) {
@@ -229,6 +270,22 @@ public final class Builtins {
 			}
 			return (double) asString(args[0], "find").indexOf(asString(args[1], "find"));
 		});
+		def(vm, "replace", 3, 3, (v, args) -> {
+			String old = asString(args[1], "replace");
+			if (old.isEmpty()) throw new ScriptError(0, "replace: the text to replace is empty");
+			String result = asString(args[0], "replace").replace(old, asString(args[2], "replace"));
+			if (result.length() > Vm.MAX_STRING) throw new ScriptError(0, "replace: string too long");
+			return result;
+		});
+		def(vm, "starts", 2, 2, (v, args) -> asString(args[0], "starts").startsWith(asString(args[1], "starts")));
+		def(vm, "ends", 2, 2, (v, args) -> asString(args[0], "ends").endsWith(asString(args[1], "ends")));
+		def(vm, "repeat", 2, 2, (v, args) -> {
+			String s = asString(args[0], "repeat");
+			long n = (long) toNumber(args[1], "repeat");
+			if (n < 0) throw new ScriptError(0, "repeat: count is negative");
+			if (s.length() * n > Vm.MAX_STRING) throw new ScriptError(0, "repeat: string too long");
+			return s.repeat((int) n);
+		});
 		def(vm, "chr", 1, 1, (v, args) -> String.valueOf((char) (int) toNumber(args[0], "chr")));
 		def(vm, "ord", 1, 1, (v, args) -> {
 			String s = asString(args[0], "ord");
@@ -252,6 +309,46 @@ public final class Builtins {
 			if (i < 0) i += list.size();
 			if (i < 0 || i >= list.size()) throw new ScriptError(0, "remove: index out of range");
 			return list.remove(i);
+		});
+		def(vm, "insert", 3, 3, (v, args) -> {
+			ArrayList<Object> list = asList(args[0], "insert");
+			if (list.size() >= Vm.MAX_LIST) throw new ScriptError(0, "insert: list too long");
+			int i = (int) toNumber(args[1], "insert");
+			if (i < 0) i += list.size();
+			if (i < 0 || i > list.size()) throw new ScriptError(0, "insert: index out of range");
+			list.add(i, args[2]);
+			return args[0];
+		});
+		def(vm, "sort", 1, 1, (v, args) -> {
+			ArrayList<Object> list = asList(args[0], "sort");
+			boolean allNumbers = true, allStrings = true;
+			for (Object element : list) {
+				if (!(element instanceof Double)) allNumbers = false;
+				if (!(element instanceof String)) allStrings = false;
+			}
+			if (allNumbers) list.sort(Comparator.comparingDouble(element -> (Double) element));
+			else if (allStrings) list.sort(Comparator.comparing(element -> (String) element));
+			else throw new ScriptError(0, "sort: needs a list of only numbers or only strings");
+			return args[0];
+		});
+		def(vm, "reverse", 1, 1, (v, args) -> {
+			Collections.reverse(asList(args[0], "reverse"));
+			return args[0];
+		});
+		def(vm, "slice", 2, 3, (v, args) -> {
+			ArrayList<Object> list = asList(args[0], "slice");
+			int from = Math.clamp((int) toNumber(args[1], "slice"), 0, list.size());
+			int to = args.length > 2 ? Math.clamp((int) toNumber(args[2], "slice"), from, list.size()) : list.size();
+			return new ArrayList<>(list.subList(from, to));
+		});
+		def(vm, "contains", 2, 2, (v, args) -> {
+			if (args[0] instanceof ArrayList<?> list) {
+				for (Object element : list) {
+					if (element == null ? args[1] == null : element.equals(args[1])) return true;
+				}
+				return false;
+			}
+			return asString(args[0], "contains").contains(asString(args[1], "contains"));
 		});
 		def(vm, "range", 1, 2, (v, args) -> {
 			double from = args.length > 1 ? toNumber(args[0], "range") : 0;
@@ -297,26 +394,33 @@ public final class Builtins {
 				"  let x = 1   x = x + 1   # comments",
 				"  if x > 2 { } else if x > 1 { } else { }",
 				"  while true { break / continue }",
+				"  for item in [1, 2, 3] { }   for ch in \"text\" { }",
 				"  fn add(a, b) { return a + b }   (top level only)",
 				"  lists: let l = [1, 2]  l[0]  push(l, 3)  pop(l)  len(l)",
 				"  ops: + - * / %  == != < <= > >=  and or not",
 				"console: print(...) clear() read()",
 				"timing: sleep(ticks) gametime() daytime() day() uptime() realtime()",
 				"wifi: hostname() sethost(h) send(host, v) broadcast(v)",
-				"      recv([timeout]) has_msg() peers()",
+				"      recv([timeout]) has_msg() peers() ping(host)",
 				"redstone: rs_set(side, 0..15) rs_pulse(side, level, [ticks])",
 				"      rs_get(side) rs_reset()  sides: up down north south east west",
+				"      rs_wait([timeout]) -> [side, level] on any input change",
 				"signs: sign_read(side) sign_write(side, lines, [color])",
 				"inventory: block(side) inv_size(side) inv_get(side, slot)",
 				"      inv_count(side, item) inv_find(side, item) -> slot or -1",
 				"      inv_move(from, to, [item], [max]) -> items moved",
-				"world: pos() dim() biome() weather() light()",
-				"players: players([range]) say(text, [range]) beep([pitch])",
+				"world: pos() dim() biome() weather() light() moon()",
+				"players: players([range]) say(text, [range]) hear([timeout])",
+				"hologram: display(text) floats text above the pot, display() clears",
+				"sound: beep([pitch]) tone(instrument, note) instruments()",
 				"mobs: entities([range]) -> [[type, name, dist], ...]",
 				"disk: store(k, v) load(k) delkey(k) keys()",
 				"math: random() randint(a,b) floor ceil round abs sqrt pow min max",
+				"      clamp(x,lo,hi) sin cos tan atan2(y,x) pi()",
 				"text: str num type len upper lower trim split join sub find chr ord",
-				"lists: push pop remove(l, i) range([from,] to)"
+				"      replace(s,old,new) starts ends repeat(s,n) contains",
+				"lists: push pop remove insert(l,i,v) sort reverse slice(l,from,[to])",
+				"      range([from,] to) contains(l, v)"
 		);
 	}
 }

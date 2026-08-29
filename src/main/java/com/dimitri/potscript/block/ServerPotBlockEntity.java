@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.transfer.v1.storage.StorageUtil;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -27,7 +28,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
@@ -37,6 +41,7 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.AABB;
@@ -67,6 +72,9 @@ public class ServerPotBlockEntity extends BlockEntity {
 	private static final int MAX_CODE_LENGTH = 100_000;
 	private static final int MAX_DISK_ENTRIES = 256;
 	private static final int VIEW_RANGE = 16;
+	private static final int HEAR_RANGE = 16;
+	private static final int CHAT_QUEUE_MAX = 16;
+	private static final int DISPLAY_MAX_CHARS = 128;
 
 	private String hostname = "pot-" + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x1000, 0xFFFF));
 	private String code = "";
@@ -77,8 +85,14 @@ public class ServerPotBlockEntity extends BlockEntity {
 
 	private final ArrayDeque<ArrayList<Object>> mailbox = new ArrayDeque<>();
 	private final ArrayDeque<String> inputQueue = new ArrayDeque<>();
+	private final ArrayDeque<ArrayList<Object>> chatQueue = new ArrayDeque<>();
+	/** Incoming signal levels snapshotted when rs_wait parks, compared against each tick. */
+	private int[] rsWaitBaseline;
 	private final Set<UUID> viewers = new HashSet<>();
 	private final List<String> pendingLines = new ArrayList<>();
+
+	private UUID hologramId;
+	private String displayText = "";
 
 	private Vm vm;
 	private boolean running;
@@ -118,6 +132,15 @@ public class ServerPotBlockEntity extends BlockEntity {
 				case INPUT -> {
 					if (!inputQueue.isEmpty()) vm.resume(inputQueue.poll());
 				}
+				case REDSTONE -> {
+					ArrayList<Object> change = rsWaitPoll();
+					if (change != null) vm.resume(change);
+					else if (vm.waitDeadline() >= 0 && gameTime() >= vm.waitDeadline()) vm.resume(null);
+				}
+				case CHAT -> {
+					if (!chatQueue.isEmpty()) vm.resume(chatQueue.poll());
+					else if (vm.waitDeadline() >= 0 && gameTime() >= vm.waitDeadline()) vm.resume(null);
+				}
 				default -> {
 				}
 			}
@@ -150,6 +173,7 @@ public class ServerPotBlockEntity extends BlockEntity {
 	@Override
 	public void setRemoved() {
 		super.setRemoved();
+		displayClear();
 		unregisterFromNetwork();
 	}
 
@@ -199,6 +223,8 @@ public class ServerPotBlockEntity extends BlockEntity {
 		vm = null;
 		running = false;
 		autorun = false;
+		chatQueue.clear();
+		rsWaitBaseline = null;
 		setChanged();
 		sendState();
 	}
@@ -277,10 +303,12 @@ public class ServerPotBlockEntity extends BlockEntity {
 					consolePrint("  cat           print the program code");
 					consolePrint("  hostname [h]  show or set this pot's hostname");
 					consolePrint("  scan          list hosts on the wifi network");
+					consolePrint("  ping <host>   check whether a host is online");
 					consolePrint("  ls            list stored disk keys");
 					consolePrint("  rm <key>      delete a disk key");
+					consolePrint("  df            disk usage");
 					consolePrint("  clear         clear the console");
-					consolePrint("  reboot        stop, clear console & redstone");
+					consolePrint("  reboot        stop, clear console, redstone & display");
 					consolePrint("  help lang     PotScript language reference");
 					consolePrint("while running, typed lines are fed to read(); 'stop' halts");
 				}
@@ -319,10 +347,17 @@ public class ServerPotBlockEntity extends BlockEntity {
 					consolePrint("[error] no such key '" + arg + "'");
 				}
 			}
+			case "ping" -> {
+				if (arg.isEmpty()) consolePrint("[error] usage: ping <host>");
+				else if (netOnline(arg)) consolePrint(arg + " is online");
+				else consolePrint(arg + " is unreachable");
+			}
+			case "df" -> consolePrint("disk: " + disk.size() + "/" + MAX_DISK_ENTRIES + " keys used");
 			case "clear" -> consoleClear();
 			case "reboot" -> {
 				if (running) stopProgram();
 				rsReset();
+				displayClear();
 				consoleClear();
 				consolePrint("PotScript OS - '" + hostname + "' ready. Type 'help'.");
 			}
@@ -441,6 +476,11 @@ public class ServerPotBlockEntity extends BlockEntity {
 		return PotScriptNetwork.hostnames(level.getServer());
 	}
 
+	public boolean netOnline(String host) {
+		if (level == null || level.getServer() == null) return false;
+		return host.equals(hostname) || PotScriptNetwork.lookup(level.getServer(), host) != null;
+	}
+
 	private boolean deliver(String from, Object payload) {
 		if (mailbox.size() >= MAILBOX_MAX) return false;
 		ArrayList<Object> message = new ArrayList<>(2);
@@ -552,6 +592,99 @@ public class ServerPotBlockEntity extends BlockEntity {
 		Direction direction = sideToDirection(side, "rs_get");
 		if (level == null) return 0;
 		return level.getSignal(worldPosition.relative(direction), direction);
+	}
+
+	/** rs_wait is parking: remember what the six inputs look like right now. */
+	public void rsWaitBegin() {
+		rsWaitBaseline = currentInputs();
+	}
+
+	/** The first input that differs from the rs_wait baseline, as [side, level], or null. */
+	private ArrayList<Object> rsWaitPoll() {
+		if (rsWaitBaseline == null) return null;
+		int[] now = currentInputs();
+		for (Direction direction : Direction.values()) {
+			int i = direction.get3DDataValue();
+			if (now[i] != rsWaitBaseline[i]) {
+				rsWaitBaseline = null;
+				ArrayList<Object> change = new ArrayList<>(2);
+				change.add(direction.getName());
+				change.add((double) now[i]);
+				return change;
+			}
+		}
+		return null;
+	}
+
+	private int[] currentInputs() {
+		int[] inputs = new int[6];
+		if (level == null) return inputs;
+		for (Direction direction : Direction.values()) {
+			inputs[direction.get3DDataValue()] = level.getSignal(worldPosition.relative(direction), direction);
+		}
+		return inputs;
+	}
+
+	// ------------------------------------------------------------------ script I/O: chat hearing
+
+	/** Called for every chat message on the server; keep it only if we can hear it. */
+	public void onChatHeard(ServerPlayer sender, String text) {
+		if (!running || level == null || sender.level() != level) return;
+		if (sender.distanceToSqr(worldPosition.getX() + 0.5, worldPosition.getY() + 0.5, worldPosition.getZ() + 0.5)
+				> (double) HEAR_RANGE * HEAR_RANGE) {
+			return;
+		}
+		if (chatQueue.size() >= CHAT_QUEUE_MAX) chatQueue.poll();
+		ArrayList<Object> heard = new ArrayList<>(2);
+		heard.add(sender.getGameProfile().name());
+		heard.add(text);
+		chatQueue.add(heard);
+	}
+
+	public ArrayList<Object> pollChat() {
+		return chatQueue.poll();
+	}
+
+	// ------------------------------------------------------------------ script I/O: hologram
+
+	/** Puts a floating text display above the pot; blank text takes it down. */
+	public void displaySet(String text) {
+		if (text.length() > DISPLAY_MAX_CHARS) text = text.substring(0, DISPLAY_MAX_CHARS);
+		if (text.isBlank()) {
+			displayClear();
+			return;
+		}
+		displayText = text;
+		setChanged();
+		Display.TextDisplay hologram = hologram(true);
+		if (hologram != null) hologram.setText(Component.literal(text));
+	}
+
+	public void displayClear() {
+		displayText = "";
+		Display.TextDisplay hologram = hologram(false);
+		if (hologram != null) hologram.discard();
+		hologramId = null;
+		setChanged();
+	}
+
+	/** The pot's text display entity, resolved by UUID; spawned fresh if asked to. */
+	private Display.TextDisplay hologram(boolean createIfMissing) {
+		if (!(level instanceof ServerLevel serverLevel)) return null;
+		if (hologramId != null
+				&& serverLevel.getEntityInAnyDimension(hologramId) instanceof Display.TextDisplay existing
+				&& existing.isAlive()) {
+			return existing;
+		}
+		if (!createIfMissing) return null;
+		Display.TextDisplay hologram = EntityTypes.TEXT_DISPLAY.create(serverLevel, EntitySpawnReason.TRIGGERED);
+		if (hologram == null) return null;
+		hologram.setPos(worldPosition.getX() + 0.5, worldPosition.getY() + 0.75, worldPosition.getZ() + 0.5);
+		hologram.setBillboardConstraints(Display.BillboardConstraints.CENTER);
+		serverLevel.addFreshEntity(hologram);
+		hologramId = hologram.getUUID();
+		setChanged();
+		return hologram;
 	}
 
 	// ------------------------------------------------------------------ script I/O: inventories
@@ -715,6 +848,11 @@ public class ServerPotBlockEntity extends BlockEntity {
 		return level != null ? level.getRawBrightness(worldPosition.above(), 0) : 0;
 	}
 
+	/** Moon phase 0-7, 0 = full moon, computed the same way vanilla does. */
+	public int moonPhase() {
+		return (int) (dayTime() / 24000L % 8L + 8L) % 8;
+	}
+
 	private static final int MAX_ENTITY_RESULTS = 32;
 
 	/** [type_id, display_name, distance] per living entity, nearest first. */
@@ -775,6 +913,33 @@ public class ServerPotBlockEntity extends BlockEntity {
 				SoundEvents.NOTE_BLOCK_BIT.value(), SoundSource.BLOCKS, 0.8f, pitch);
 	}
 
+	/** Plays any note-block instrument at a semitone 0-24, like a note block would. */
+	public void playTone(String instrumentName, int note) {
+		NoteBlockInstrument instrument = null;
+		for (NoteBlockInstrument candidate : NoteBlockInstrument.values()) {
+			if (candidate.getSerializedName().equals(instrumentName.toLowerCase())) {
+				instrument = candidate;
+				break;
+			}
+		}
+		if (instrument == null || instrument == NoteBlockInstrument.CUSTOM_HEAD) {
+			throw new ScriptError(0, "tone: unknown instrument '" + instrumentName + "'");
+		}
+		if (level == null) return;
+		float pitch = (float) Math.pow(2.0, (note - 12) / 12.0);
+		level.playSound(null, worldPosition.getX() + 0.5, worldPosition.getY() + 0.5, worldPosition.getZ() + 0.5,
+				instrument.getSoundEvent().value(), SoundSource.BLOCKS, 0.9f, pitch);
+	}
+
+	/** Instrument names for tone(), in note-block order. */
+	public static ArrayList<Object> toneInstruments() {
+		ArrayList<Object> names = new ArrayList<>();
+		for (NoteBlockInstrument instrument : NoteBlockInstrument.values()) {
+			if (instrument != NoteBlockInstrument.CUSTOM_HEAD) names.add(instrument.getSerializedName());
+		}
+		return names;
+	}
+
 	// ------------------------------------------------------------------ script I/O: disk
 
 	public void diskStore(String key, String value) {
@@ -811,6 +976,8 @@ public class ServerPotBlockEntity extends BlockEntity {
 		out.putBoolean("autorun", autorun || running);
 		out.putIntArray("outputs", outputs.clone());
 		out.putIntArray("pulses", pulseTicksLeft.clone());
+		out.putString("display", displayText);
+		if (hologramId != null) out.store("hologram", UUIDUtil.CODEC, hologramId);
 		out.store("console", Codec.STRING.listOf(), List.copyOf(console));
 		out.store("disk_keys", Codec.STRING.listOf(), List.copyOf(disk.keySet()));
 		out.store("disk_values", Codec.STRING.listOf(), List.copyOf(disk.values()));
@@ -830,6 +997,8 @@ public class ServerPotBlockEntity extends BlockEntity {
 		if (savedPulses != null && savedPulses.length == 6) {
 			System.arraycopy(savedPulses, 0, pulseTicksLeft, 0, 6);
 		}
+		displayText = in.getStringOr("display", "");
+		hologramId = in.read("hologram", UUIDUtil.CODEC).orElse(null);
 		console.clear();
 		console.addAll(in.read("console", Codec.STRING.listOf()).orElse(List.of()));
 		disk.clear();

@@ -21,7 +21,7 @@ public final class Lexer {
 		COMMA, PLUS, MINUS, STAR, SLASH, PERCENT,
 		EQ, EQEQ, BANGEQ, LT, LTEQ, GT, GTEQ,
 		IDENT, NUMBER, STRING,
-		LET, FN, IF, ELSE, WHILE, RETURN, BREAK, CONTINUE,
+		LET, FN, IF, ELSE, WHILE, FOR, IN, RETURN, BREAK, CONTINUE,
 		AND, OR, NOT, TRUE, FALSE, NIL,
 		COMMENT, NEWLINE, EOF,
 		/** Only produced by {@link #tokenizeForEditor}; never reaches the compiler. */
@@ -56,6 +56,8 @@ public final class Lexer {
 			Map.entry("if", Type.IF),
 			Map.entry("else", Type.ELSE),
 			Map.entry("while", Type.WHILE),
+			Map.entry("for", Type.FOR),
+			Map.entry("in", Type.IN),
 			Map.entry("return", Type.RETURN),
 			Map.entry("break", Type.BREAK),
 			Map.entry("continue", Type.CONTINUE),

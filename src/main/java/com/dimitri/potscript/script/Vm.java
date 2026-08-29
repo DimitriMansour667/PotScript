@@ -19,7 +19,7 @@ public final class Vm {
 	}
 
 	public enum WaitKind {
-		NONE, SLEEP, MESSAGE, INPUT
+		NONE, SLEEP, MESSAGE, INPUT, REDSTONE, CHAT
 	}
 
 	/** A native (built-in) function. May return {@link #BLOCK} after calling {@link #park}. */
@@ -213,6 +213,14 @@ public final class Vm {
 					for (int i = 0; i < count; i++) list.add(peek(count - 1 - i));
 					for (int i = 0; i < count; i++) pop();
 					push(list);
+				}
+				case Op.LEN -> {
+					Object target = pop();
+					switch (target) {
+						case ArrayList<?> list -> push((double) list.size());
+						case String s -> push((double) s.length());
+						default -> throw runtimeError(frame, "'for' can only loop over a list or string, not " + Values.typeName(target));
+					}
 				}
 				case Op.INDEX_GET -> {
 					Object index = pop(), target = pop();

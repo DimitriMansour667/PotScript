@@ -262,7 +262,7 @@ public class CodeAreaComponent extends TextAreaComponent {
 
 	private static int colourOf(Token token) {
 		return switch (token.type()) {
-			case LET, FN, IF, ELSE, WHILE, RETURN, BREAK, CONTINUE, AND, OR, NOT -> COLOR_KEYWORD;
+			case LET, FN, IF, ELSE, WHILE, FOR, IN, RETURN, BREAK, CONTINUE, AND, OR, NOT -> COLOR_KEYWORD;
 			case TRUE, FALSE, NIL, NUMBER -> COLOR_LITERAL;
 			case STRING -> COLOR_STRING;
 			case COMMENT -> COLOR_COMMENT;

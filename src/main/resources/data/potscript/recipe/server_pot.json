@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "Q": "minecraft:quartz",
+    "R": "minecraft:redstone",
+    "P": "minecraft:flower_pot",
+    "I": "minecraft:iron_ingot"
+  },
+  "pattern": [
+    "QRQ",
+    "IPI",
+    "III"
+  ],
+  "result": {
+    "id": "potscript:server_pot"
+  }
+}

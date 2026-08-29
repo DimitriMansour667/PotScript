@@ -31,6 +31,7 @@ public final class Op {
 	public static final int LIST = 26;         // operand: element count
 	public static final int INDEX_GET = 27;
 	public static final int INDEX_SET = 28;
+	public static final int LEN = 29;          // length of a list or string (for 'for' loops)
 
 	private Op() {
 	}

@@ -3,10 +3,12 @@ package com.dimitri.potscript;
 import com.dimitri.potscript.block.ServerPotBlock;
 import com.dimitri.potscript.block.ServerPotBlockEntity;
 import com.dimitri.potscript.item.MemoryCardItem;
+import com.dimitri.potscript.net.PotScriptNetwork;
 import com.dimitri.potscript.net.PotScriptNetworking;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerBlockEntityEvents;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -97,6 +99,15 @@ public class PotScript implements ModInitializer {
 		// the wifi registry here or they would haunt it as ghosts.
 		ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register((blockEntity, level) -> {
 			if (blockEntity instanceof ServerPotBlockEntity pot) pot.unregisterFromNetwork();
+		});
+
+		// Pots overhear chat spoken near them, for the hear() builtin. Each pot
+		// decides for itself whether the speaker was in range.
+		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
+			String text = message.signedContent();
+			for (ServerPotBlockEntity pot : PotScriptNetwork.pots(sender.level().getServer())) {
+				pot.onChatHeard(sender, text);
+			}
 		});
 	}
 }

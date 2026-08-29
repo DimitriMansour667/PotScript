@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "Q": "minecraft:quartz",
+    "R": "minecraft:redstone",
+    "I": "minecraft:iron_nugget"
+  },
+  "pattern": [
+    "Q",
+    "R",
+    "I"
+  ],
+  "result": {
+    "id": "potscript:memory_card"
+  }
+}
