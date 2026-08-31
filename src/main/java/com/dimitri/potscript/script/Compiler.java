@@ -414,6 +414,11 @@ public final class Compiler {
 				patchJump(end);
 			}
 			case LPAREN -> callArguments();
+			case DOT -> {
+				Token name = consume(Type.IDENT, "expected a member name after '.'");
+				emit(Op.GET_MEMBER);
+				emit(constant(name.text()));
+			}
 			case LBRACKET -> {
 				expression();
 				consume(Type.RBRACKET, "expected ']' after index");
@@ -436,7 +441,7 @@ public final class Compiler {
 			case GT, GTEQ, LT, LTEQ -> PREC_COMPARISON;
 			case PLUS, MINUS -> PREC_TERM;
 			case STAR, SLASH, PERCENT -> PREC_FACTOR;
-			case LPAREN, LBRACKET -> PREC_CALL;
+			case LPAREN, LBRACKET, DOT -> PREC_CALL;
 			default -> PREC_NONE;
 		};
 	}

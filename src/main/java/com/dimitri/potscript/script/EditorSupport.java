@@ -32,6 +32,8 @@ public final class EditorSupport {
 	public enum Kind {
 		/** A standard library function. */
 		BUILTIN,
+		/** A block method, offered after a '.'. */
+		METHOD,
 		/** A language keyword. */
 		KEYWORD,
 		/** An {@code fn} declared in this buffer. */
@@ -84,7 +86,10 @@ public final class EditorSupport {
 				if (depth > 0) {
 					depth--;
 				} else if (i > 0 && before.get(i - 1).type() == Type.IDENT) {
-					BuiltinDocs.Builtin builtin = BuiltinDocs.get(before.get(i - 1).text());
+					// A '.' in front of the name makes it a block method call.
+					BuiltinDocs.Builtin builtin = i > 1 && before.get(i - 2).type() == Type.DOT
+							? BuiltinDocs.method(before.get(i - 1).text())
+							: BuiltinDocs.get(before.get(i - 1).text());
 					return builtin == null ? null : new Signature(builtin, commas);
 				} else {
 					return null;
@@ -147,6 +152,7 @@ public final class EditorSupport {
 		if (inLiteralOrComment(source, cursor)) return List.of();
 
 		String prefix = prefixAt(source, cursor);
+		if (isMemberPosition(source, cursor, prefix)) return methodCompletions(prefix);
 		List<Completion> matches = new ArrayList<>();
 
 		for (Completion candidate : declarations(source, cursor).values()) {
@@ -166,6 +172,32 @@ public final class EditorSupport {
 		matches.sort(Comparator
 				.comparingInt((Completion c) -> c.kind() == Kind.KEYWORD ? 1 : 0)
 				.thenComparing(Completion::name));
+		return matches;
+	}
+
+	/**
+	 * True when the prefix at the cursor sits right behind a '.', which makes
+	 * it a member name. A dot inside a number ({@code 1.5}) does not count.
+	 */
+	private static boolean isMemberPosition(String source, int cursor, String prefix) {
+		int start = Math.clamp(cursor, 0, source.length()) - prefix.length();
+		if (start <= 0 || source.charAt(start - 1) != '.') return false;
+		return start < 2 || !Character.isDigit(source.charAt(start - 2));
+	}
+
+	/**
+	 * After a '.' only block methods make sense — the buffer's own names, the
+	 * globals and the keywords would all be wrong there. The editor cannot
+	 * know what kind of block the handle points at, so it offers every method.
+	 */
+	private static List<Completion> methodCompletions(String prefix) {
+		List<Completion> matches = new ArrayList<>();
+		for (BuiltinDocs.Builtin method : BuiltinDocs.methods()) {
+			if (matchesPrefix(method.name(), prefix)) {
+				matches.add(new Completion(method.name(), Kind.METHOD, method.display()));
+			}
+		}
+		matches.sort(Comparator.comparing(Completion::name));
 		return matches;
 	}
 

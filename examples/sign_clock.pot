@@ -1,7 +1,7 @@
 # Sign clock: keeps a sign updated with the in-game day, time of day and
-# the real-world time. Place a sign on any side and point 'side' at it.
+# the real-world time. Place a sign on any side and point 'sign' at it.
 
-let side = "north"
+let sign = getBlock("north")
 
 fn pad(n) {
     if n < 10 { return "0" + str(n) }
@@ -19,7 +19,7 @@ while true {
     let rh = floor(now / 3600) % 24
     let rm = floor(now / 60) % 60
 
-    sign_write(side, [
+    sign.write([
         "day " + str(day()),
         pad(hour) + ":" + pad(minute),
         "real (UTC)",

@@ -6,7 +6,9 @@
 let hostiles = ["minecraft:zombie", "minecraft:skeleton", "minecraft:creeper",
                 "minecraft:spider", "minecraft:witch", "minecraft:enderman"]
 
-sign_write("north", ["mob alarm", "all clear"], "lime")
+let sign = getBlock("north")
+let lamp = getBlock("up")
+sign.write(["mob alarm", "all clear"], "lime")
 
 while true {
     let found = nil
@@ -22,11 +24,11 @@ while true {
     }
 
     if found != nil {
-        sign_write("north", ["! ALARM !", found[1], str(found[2]) + " blocks"], "red")
-        rs_pulse("up", 15, 10)
+        sign.write(["! ALARM !", found[1], str(found[2]) + " blocks"], "red")
+        lamp.rs_pulse(15, 10)
         beep(20)
     } else {
-        sign_write("north", ["mob alarm", "all clear"], "lime")
+        sign.write(["mob alarm", "all clear"], "lime")
     }
     sleep(20)
 }

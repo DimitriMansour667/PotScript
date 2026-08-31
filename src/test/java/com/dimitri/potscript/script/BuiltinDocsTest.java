@@ -3,7 +3,9 @@ package com.dimitri.potscript.script;
 import com.dimitri.potscript.script.BuiltinDocs.Builtin;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,14 +15,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuiltinDocsTest {
 
+	/** Globals and block methods together: everything the editor can hint. */
+	private static List<Builtin> everything() {
+		List<Builtin> entries = new ArrayList<>(BuiltinDocs.all());
+		entries.addAll(BuiltinDocs.methods());
+		return entries;
+	}
+
 	@Test
 	void documentsEveryBuiltin() {
-		assertEquals(90, BuiltinDocs.all().size());
+		assertEquals(80, BuiltinDocs.all().size());
+		assertEquals(15, BuiltinDocs.methods().size());
 	}
 
 	@Test
 	void parameterNamesMatchTheDeclaredArity() {
-		for (Builtin builtin : BuiltinDocs.all()) {
+		for (Builtin builtin : everything()) {
 			if (builtin.isVariadic()) continue;
 			assertEquals(builtin.maxArgs(), builtin.params().size(),
 					builtin.name() + " names " + builtin.params() + " but takes up to " + builtin.maxArgs());
@@ -29,7 +39,7 @@ class BuiltinDocsTest {
 
 	@Test
 	void bracketsMarkExactlyTheOptionalParameters() {
-		for (Builtin builtin : BuiltinDocs.all()) {
+		for (Builtin builtin : everything()) {
 			if (builtin.isVariadic()) continue;
 			boolean hasOptional = builtin.maxArgs() > builtin.minArgs();
 			assertEquals(hasOptional, builtin.paramSpec().contains("["),
@@ -42,18 +52,26 @@ class BuiltinDocsTest {
 		Set<String> seen = new HashSet<>();
 		for (Builtin builtin : BuiltinDocs.all()) {
 			assertTrue(seen.add(builtin.name()), "duplicate entry for " + builtin.name());
+			assertNotNull(BuiltinDocs.get(builtin.name()));
+			assertTrue(BuiltinDocs.isBuiltin(builtin.name()));
+		}
+		for (Builtin method : BuiltinDocs.methods()) {
+			assertNotNull(BuiltinDocs.method(method.name()));
+			assertTrue(BuiltinDocs.isMethod(method.name()));
+		}
+		for (Builtin builtin : everything()) {
 			assertFalse(builtin.returns().isBlank(), builtin.name() + " has no return type");
 			assertFalse(builtin.doc().isBlank(), builtin.name() + " has no description");
 			assertTrue(builtin.doc().endsWith("."), builtin.name() + " description is not a sentence");
-			assertNotNull(BuiltinDocs.get(builtin.name()));
-			assertTrue(BuiltinDocs.isBuiltin(builtin.name()));
 		}
 	}
 
 	/**
 	 * The real registrations, checked against the table. Registering closes
 	 * over the block entity but never calls it, so a null pot is enough to get
-	 * all 90 natives installed without a world.
+	 * every native installed without a world. (Block methods have no static
+	 * registration to check — BlockHandle builds each bound native straight
+	 * from this table, so their arities cannot diverge by construction.)
 	 */
 	@Test
 	void tableAgreesWithTheActualRegistrations() {
@@ -76,7 +94,9 @@ class BuiltinDocsTest {
 		assertEquals("range([from,] to) -> list", BuiltinDocs.get("range").display());
 		assertEquals("rs_reset() -> nil", BuiltinDocs.get("rs_reset").display());
 		assertEquals("print(...) -> nil", BuiltinDocs.get("print").display());
-		assertEquals(java.util.List.of("from", "to"), BuiltinDocs.get("range").params());
-		assertEquals(java.util.List.of("from", "to", "item", "max"), BuiltinDocs.get("inv_move").params());
+		assertEquals("getBlock(side, [kind]) -> block", BuiltinDocs.get("getBlock").display());
+		assertEquals("move_inv(to, [item], [max]) -> number", BuiltinDocs.method("move_inv").display());
+		assertEquals(List.of("from", "to"), BuiltinDocs.get("range").params());
+		assertEquals(List.of("to", "item", "max"), BuiltinDocs.method("move_inv").params());
 	}
 }

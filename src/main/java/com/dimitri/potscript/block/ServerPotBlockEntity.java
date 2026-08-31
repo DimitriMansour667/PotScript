@@ -714,18 +714,31 @@ public class ServerPotBlockEntity extends BlockEntity {
 	}
 
 	public String blockId(String side) {
-		Direction direction = sideToDirection(side, "block");
+		Direction direction = sideToDirection(side, "id");
 		if (level == null) return "minecraft:air";
 		return BuiltInRegistries.BLOCK.getKey(level.getBlockState(worldPosition.relative(direction)).getBlock()).toString();
 	}
 
+	public boolean isAir(String side) {
+		Direction direction = sideToDirection(side, "is_air");
+		return level == null || level.getBlockState(worldPosition.relative(direction)).isAir();
+	}
+
+	public boolean hasInventory(String side) {
+		return containerAt(side, "has_inv") != null;
+	}
+
+	public boolean isSign(String side) {
+		return signAt(side, "is_sign") != null;
+	}
+
 	public Object invSize(String side) {
-		Container container = containerAt(side, "inv_size");
+		Container container = containerAt(side, "size");
 		return container == null ? null : (double) container.getContainerSize();
 	}
 
 	public Object invGet(String side, int slot) {
-		Container container = containerAt(side, "inv_get");
+		Container container = containerAt(side, "get");
 		if (container == null || slot < 0 || slot >= container.getContainerSize()) return null;
 		ItemStack stack = container.getItem(slot);
 		if (stack.isEmpty()) return null;
@@ -736,14 +749,14 @@ public class ServerPotBlockEntity extends BlockEntity {
 	}
 
 	public double invCount(String side, String itemArg) {
-		Item item = resolveItem(itemArg, "inv_count");
-		Container container = containerAt(side, "inv_count");
+		Item item = resolveItem(itemArg, "count");
+		Container container = containerAt(side, "count");
 		return container == null ? 0 : container.countItem(item);
 	}
 
 	public double invFind(String side, String itemArg) {
-		Item item = resolveItem(itemArg, "inv_find");
-		Container container = containerAt(side, "inv_find");
+		Item item = resolveItem(itemArg, "find");
+		Container container = containerAt(side, "find");
 		if (container == null) return -1;
 		for (int slot = 0; slot < container.getContainerSize(); slot++) {
 			if (container.getItem(slot).is(item)) return slot;
@@ -752,10 +765,10 @@ public class ServerPotBlockEntity extends BlockEntity {
 	}
 
 	public double invMove(String fromSide, String toSide, String itemArg, long max) {
-		Direction from = sideToDirection(fromSide, "inv_move");
-		Direction to = sideToDirection(toSide, "inv_move");
-		if (from == to) throw new ScriptError(0, "inv_move: source and target are the same side");
-		Item item = itemArg != null ? resolveItem(itemArg, "inv_move") : null;
+		Direction from = sideToDirection(fromSide, "move_inv");
+		Direction to = sideToDirection(toSide, "move_inv");
+		if (from == to) throw new ScriptError(0, "move_inv: source and target are the same side");
+		Item item = itemArg != null ? resolveItem(itemArg, "move_inv") : null;
 		if (level == null || max <= 0) return 0;
 		Storage<ItemVariant> source = ItemStorage.SIDED.find(level, worldPosition.relative(from), from.getOpposite());
 		Storage<ItemVariant> target = ItemStorage.SIDED.find(level, worldPosition.relative(to), to.getOpposite());
@@ -780,7 +793,7 @@ public class ServerPotBlockEntity extends BlockEntity {
 	}
 
 	public Object signRead(String side) {
-		SignBlockEntity sign = signAt(side, "sign_read");
+		SignBlockEntity sign = signAt(side, "read");
 		if (sign == null) return null;
 		ArrayList<Object> lines = new ArrayList<>(SIGN_LINES);
 		for (int i = 0; i < SIGN_LINES; i++) {
@@ -790,13 +803,13 @@ public class ServerPotBlockEntity extends BlockEntity {
 	}
 
 	public boolean signWrite(String side, List<String> lines, String colorName) {
-		if (lines.size() > SIGN_LINES) throw new ScriptError(0, "sign_write: a sign has " + SIGN_LINES + " lines");
-		SignBlockEntity sign = signAt(side, "sign_write");
+		if (lines.size() > SIGN_LINES) throw new ScriptError(0, "write: a sign has " + SIGN_LINES + " lines");
+		SignBlockEntity sign = signAt(side, "write");
 		if (sign == null) return false;
 		SignText text = sign.getFrontText();
 		if (colorName != null) {
 			DyeColor color = DyeColor.byName(colorName.toLowerCase(), null);
-			if (color == null) throw new ScriptError(0, "sign_write: unknown dye color '" + colorName + "'");
+			if (color == null) throw new ScriptError(0, "write: unknown dye color '" + colorName + "'");
 			text = text.setColor(color);
 		}
 		for (int i = 0; i < SIGN_LINES; i++) {

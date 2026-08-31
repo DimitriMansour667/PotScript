@@ -32,6 +32,7 @@ public final class Op {
 	public static final int INDEX_GET = 27;
 	public static final int INDEX_SET = 28;
 	public static final int LEN = 29;          // length of a list or string (for 'for' loops)
+	public static final int GET_MEMBER = 30;   // operand: constant index (member name)
 
 	private Op() {
 	}

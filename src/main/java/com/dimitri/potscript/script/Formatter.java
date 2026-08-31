@@ -128,6 +128,7 @@ public final class Formatter {
 
 		if (cur == Type.COMMA || cur == Type.RPAREN || cur == Type.RBRACKET) return false;
 		if (prev == Type.LPAREN || prev == Type.LBRACKET) return false;
+		if (cur == Type.DOT || prev == Type.DOT) return false;
 
 		// A call's arguments and an index hug their opener; a list literal or a
 		// parenthesised group after an operator does not.
