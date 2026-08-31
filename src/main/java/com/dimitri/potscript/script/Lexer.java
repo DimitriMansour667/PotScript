@@ -18,7 +18,7 @@ public final class Lexer {
 
 	public enum Type {
 		LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET,
-		COMMA, DOT, PLUS, MINUS, STAR, SLASH, PERCENT,
+		COMMA, PLUS, MINUS, STAR, SLASH, PERCENT,
 		EQ, EQEQ, BANGEQ, LT, LTEQ, GT, GTEQ,
 		IDENT, NUMBER, STRING,
 		LET, FN, IF, ELSE, WHILE, FOR, IN, RETURN, BREAK, CONTINUE,
@@ -132,7 +132,6 @@ public final class Lexer {
 			case '{' -> add(Type.LBRACE);
 			case '}' -> add(Type.RBRACE);
 			case ',' -> add(Type.COMMA);
-			case '.' -> add(Type.DOT);
 			case '+' -> add(Type.PLUS);
 			case '-' -> add(Type.MINUS);
 			case '*' -> add(Type.STAR);

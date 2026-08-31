@@ -129,30 +129,8 @@ class EditorSupportTest {
 
 	@Test
 	void completesBuiltinsByPrefix() {
-		List<String> names = completionNamesAt("let x = rs_|");
-		assertEquals(List.of("rs_reset", "rs_wait"), names);
-	}
-
-	@Test
-	void completesMethodsAfterADot() {
-		assertEquals(List.of("rs_get", "rs_pulse", "rs_set"), completionNamesAt("let b = getBlock(\"up\")\nb.rs_|"));
-		assertEquals(List.of("move_inv"), completionNamesAt("chest.mo|"));
-	}
-
-	@Test
-	void offersOnlyMethodsAfterADot() {
-		List<String> names = completionNamesAt("let banner = 1\nb.|");
-		assertEquals(15, names.size(), names.toString());
-		assertTrue(names.contains("move_inv"), names.toString());
-		assertFalse(names.contains("let"), "no keywords after a dot");
-		assertFalse(names.contains("banner"), "no buffer names after a dot");
-		assertFalse(names.contains("getBlock"), "no globals after a dot");
-	}
-
-	@Test
-	void aDotInANumberIsNotAMemberAccess() {
-		// After "1." the member list would be nonsense; normal completion rules apply.
-		assertFalse(completionNamesAt("let x = 1.|").contains("move_inv"));
+		List<String> names = completionNamesAt("let x = inv_|");
+		assertEquals(List.of("inv_count", "inv_find", "inv_get", "inv_move", "inv_size"), names);
 	}
 
 	@Test
@@ -219,30 +197,6 @@ class EditorSupportTest {
 	@Test
 	void completesInsideAHalfWrittenProgram() {
 		List<String> names = completionNamesAt("while true {\n    let s = \"unterminated\n    rs_|");
-		assertEquals(List.of("rs_reset", "rs_wait"), names);
-	}
-
-	// ------------------------------------------------------------- methods
-
-	@Test
-	void findsTheEnclosingMethodCall() {
-		Signature sig = signatureAt("chest.move_inv(|");
-		assertNotNull(sig);
-		assertEquals("move_inv", sig.builtin().name());
-		assertEquals(0, sig.activeParam());
-	}
-
-	@Test
-	void hintsAMethodCallOnACallResult() {
-		Signature sig = signatureAt("getBlock(\"up\").write([\"hi\"], |");
-		assertEquals("write", sig.builtin().name());
-		assertEquals(1, sig.activeParam());
-	}
-
-	@Test
-	void methodAndGlobalSignaturesAreDistinct() {
-		// 'find' exists both as a global and as a block method.
-		assertEquals("haystack", signatureAt("find(|").builtin().params().getFirst());
-		assertEquals("item", signatureAt("b.find(|").builtin().params().getFirst());
+		assertEquals(List.of("rs_get", "rs_pulse", "rs_reset", "rs_set", "rs_wait"), names);
 	}
 }

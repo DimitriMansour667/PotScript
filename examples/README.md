@@ -5,8 +5,8 @@ paste one in and `run` — or carry them between pots on a Memory Card.
 
 | File | Shows off |
 | --- | --- |
-| `mob_alarm.pot` | `entities()` mob sensing, `getBlock` handles, `sign.write()`, `lamp.rs_pulse()` |
-| `sign_clock.pot` | `sign.write()` as a display, `daytime()`/`day()`, `realtime()` |
+| `mob_alarm.pot` | `entities()` mob sensing, `sign_write()` status display, `rs_pulse()` |
+| `sign_clock.pot` | `sign_write()` as a display, `daytime()`/`day()`, `realtime()` |
 
 The full language reference lives on the
 [project wiki](https://github.com/DimitriMansour667/PotScript/wiki); in-game,

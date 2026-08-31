@@ -27,16 +27,9 @@ class FormatterTest {
 
 	@Test
 	void hugsCallParensAndIndexBrackets() {
-		assertFormats("let v = getBlock (\"up\", 0)", "let v = getBlock(\"up\", 0)");
+		assertFormats("let v = inv_get (\"up\", 0)", "let v = inv_get(\"up\", 0)");
 		assertFormats("let a = l [0]", "let a = l[0]");
 		assertFormats("let l = [1,2]", "let l = [1, 2]");
-	}
-
-	@Test
-	void hugsMemberDots() {
-		assertFormats("chest . move_inv ( barrel )", "chest.move_inv(barrel)");
-		assertFormats("getBlock(\"up\") . rs_set(15)", "getBlock(\"up\").rs_set(15)");
-		assertFormats("let x = 1.5+b.rs_get()", "let x = 1.5 + b.rs_get()");
 	}
 
 	@Test
@@ -189,13 +182,12 @@ class FormatterTest {
 		assertIdempotent("""
 				sethost( "door" );;
 				# main loop
-				let door=getBlock( "up" )
 				while true{
 				let msg=recv()
 				  let from=msg[ 0 ]
 				let body = msg[1]
-				    if body=="open"{door . rs_set(15);sleep( 40 )
-				door.rs_set( 0 )}else if body == "ping" { send(from,[ "pong",gametime() ]) }
+				    if body=="open"{rs_set("up",15);sleep( 40 )
+				rs_set( "up" ,0 )}else if body == "ping" { send(from,[ "pong",gametime() ]) }
 				}
 				""");
 	}

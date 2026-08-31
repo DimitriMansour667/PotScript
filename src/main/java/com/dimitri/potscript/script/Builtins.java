@@ -1,6 +1,5 @@
 package com.dimitri.potscript.script;
 
-import com.dimitri.potscript.block.BlockHandle;
 import com.dimitri.potscript.block.ServerPotBlockEntity;
 import com.dimitri.potscript.script.Vm.Native;
 import com.dimitri.potscript.script.Vm.WaitKind;
@@ -73,14 +72,19 @@ public final class Builtins {
 		});
 		def(vm, "ping", 1, 1, (v, args) -> be.netOnline(asString(args[0], "ping")));
 
-		// ---- neighbouring blocks ----
-		def(vm, "getBlock", 1, 2, (v, args) -> {
-			BlockHandle handle = BlockHandle.of(be, asString(args[0], "getBlock"));
-			if (args.length > 1 && args[1] != null && !handle.matches(asString(args[1], "getBlock"))) {
-				return null;
-			}
-			return handle;
+		// ---- redstone ----
+		def(vm, "rs_set", 2, 2, (v, args) -> {
+			int level = (int) toNumber(args[1], "rs_set");
+			be.rsSet(asString(args[0], "rs_set"), Math.clamp(level, 0, 15));
+			return null;
 		});
+		def(vm, "rs_pulse", 2, 3, (v, args) -> {
+			int level = (int) toNumber(args[1], "rs_pulse");
+			int ticks = args.length > 2 ? (int) toNumber(args[2], "rs_pulse") : 2;
+			be.rsPulse(asString(args[0], "rs_pulse"), Math.clamp(level, 0, 15), ticks);
+			return null;
+		});
+		def(vm, "rs_get", 1, 1, (v, args) -> (double) be.rsGet(asString(args[0], "rs_get")));
 		def(vm, "rs_reset", 0, 0, (v, args) -> {
 			be.rsReset();
 			return null;
@@ -91,6 +95,34 @@ public final class Builtins {
 			be.rsWaitBegin();
 			v.park(WaitKind.REDSTONE, deadline);
 			return Vm.BLOCK;
+		});
+
+		// ---- neighbor inventories ----
+		def(vm, "block", 1, 1, (v, args) -> be.blockId(asString(args[0], "block")));
+		def(vm, "inv_size", 1, 1, (v, args) -> be.invSize(asString(args[0], "inv_size")));
+		def(vm, "inv_get", 2, 2, (v, args) ->
+				be.invGet(asString(args[0], "inv_get"), (int) toNumber(args[1], "inv_get")));
+		def(vm, "inv_count", 2, 2, (v, args) ->
+				be.invCount(asString(args[0], "inv_count"), asString(args[1], "inv_count")));
+		def(vm, "inv_find", 2, 2, (v, args) ->
+				be.invFind(asString(args[0], "inv_find"), asString(args[1], "inv_find")));
+		def(vm, "inv_move", 2, 4, (v, args) -> {
+			String item = args.length > 2 && args[2] != null ? asString(args[2], "inv_move") : null;
+			long max = args.length > 3 ? (long) toNumber(args[3], "inv_move") : Long.MAX_VALUE;
+			return be.invMove(asString(args[0], "inv_move"), asString(args[1], "inv_move"), item, max);
+		});
+
+		// ---- signs ----
+		def(vm, "sign_read", 1, 1, (v, args) -> be.signRead(asString(args[0], "sign_read")));
+		def(vm, "sign_write", 2, 3, (v, args) -> {
+			List<String> lines = new ArrayList<>();
+			if (args[1] instanceof ArrayList<?> list) {
+				for (Object element : list) lines.add(Values.stringify(element));
+			} else {
+				lines.add(Values.stringify(args[1]));
+			}
+			String color = args.length > 2 && args[2] != null ? asString(args[2], "sign_write") : null;
+			return be.signWrite(asString(args[0], "sign_write"), lines, color);
 		});
 
 		// ---- world sensors ----
@@ -370,14 +402,13 @@ public final class Builtins {
 				"timing: sleep(ticks) gametime() daytime() day() uptime() realtime()",
 				"wifi: hostname() sethost(h) send(host, v) broadcast(v)",
 				"      recv([timeout]) has_msg() peers() ping(host)",
-				"blocks: let b = getBlock(side)  sides: up down north south east west",
-				"      getBlock(side, kind) -> nil unless kind (\"chest\"/\"sign\"/id) matches",
-				"      b.id() b.side() b.is_air() b.has_inv() b.is_sign()",
-				"redstone: b.rs_set(0..15) b.rs_pulse(level, [ticks]) b.rs_get()",
-				"      rs_reset()  rs_wait([timeout]) -> [side, level] on input change",
-				"chests: b.size() b.get(slot) b.count(item) b.find(item) -> slot or -1",
-				"      b.move_inv(to, [item], [max]) -> items moved",
-				"signs: b.read() b.write(lines, [color])",
+				"redstone: rs_set(side, 0..15) rs_pulse(side, level, [ticks])",
+				"      rs_get(side) rs_reset()  sides: up down north south east west",
+				"      rs_wait([timeout]) -> [side, level] on any input change",
+				"signs: sign_read(side) sign_write(side, lines, [color])",
+				"inventory: block(side) inv_size(side) inv_get(side, slot)",
+				"      inv_count(side, item) inv_find(side, item) -> slot or -1",
+				"      inv_move(from, to, [item], [max]) -> items moved",
 				"world: pos() dim() biome() weather() light() moon()",
 				"players: players([range]) say(text, [range]) hear([timeout])",
 				"hologram: display(text) floats text above the pot, display() clears",

@@ -222,16 +222,6 @@ public final class Vm {
 						default -> throw runtimeError(frame, "'for' can only loop over a list or string, not " + Values.typeName(target));
 					}
 				}
-				case Op.GET_MEMBER -> {
-					String name = (String) chunk.constants.get(chunk.get(frame.ip++));
-					Object target = pop();
-					if (target instanceof ScriptObject object) {
-						push(object.member(name));
-					} else {
-						throw runtimeError(frame, "'." + name + "' needs an object like a block, not "
-								+ Values.typeName(target));
-					}
-				}
 				case Op.INDEX_GET -> {
 					Object index = pop(), target = pop();
 					push(indexGet(frame, target, index));

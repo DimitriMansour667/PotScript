@@ -250,9 +250,8 @@ public class CodeAreaComponent extends TextAreaComponent {
 		java.util.Arrays.fill(painted, COLOR_TEXT);
 
 		List<Token> tokens = Lexer.tokenizeForEditor(value);
-		for (int t = 0; t < tokens.size(); t++) {
-			Token token = tokens.get(t);
-			int colour = colourOf(token, t > 0 && tokens.get(t - 1).type() == Lexer.Type.DOT);
+		for (Token token : tokens) {
+			int colour = colourOf(token);
 			if (colour == COLOR_TEXT) continue;
 			for (int i = token.start(); i < Math.min(token.end(), painted.length); i++) {
 				painted[i] = colour;
@@ -261,15 +260,14 @@ public class CodeAreaComponent extends TextAreaComponent {
 		colours = painted;
 	}
 
-	private static int colourOf(Token token, boolean afterDot) {
+	private static int colourOf(Token token) {
 		return switch (token.type()) {
 			case LET, FN, IF, ELSE, WHILE, FOR, IN, RETURN, BREAK, CONTINUE, AND, OR, NOT -> COLOR_KEYWORD;
 			case TRUE, FALSE, NIL, NUMBER -> COLOR_LITERAL;
 			case STRING -> COLOR_STRING;
 			case COMMENT -> COLOR_COMMENT;
 			case ERROR -> COLOR_ERROR;
-			case IDENT -> (afterDot ? BuiltinDocs.isMethod(token.text()) : BuiltinDocs.isBuiltin(token.text()))
-					? COLOR_BUILTIN : COLOR_TEXT;
+			case IDENT -> BuiltinDocs.isBuiltin(token.text()) ? COLOR_BUILTIN : COLOR_TEXT;
 			case NEWLINE, EOF -> COLOR_TEXT;
 			default -> COLOR_PUNCTUATION;
 		};

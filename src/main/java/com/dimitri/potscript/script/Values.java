@@ -17,7 +17,6 @@ public final class Values {
 			case ArrayList<?> ignored -> "list";
 			case ScriptFunction ignored -> "function";
 			case Vm.Native ignored -> "function";
-			case ScriptObject object -> object.typeName();
 			default -> value.getClass().getSimpleName();
 		};
 	}
@@ -43,7 +42,6 @@ public final class Values {
 				}
 				yield sb.append(']').toString();
 			}
-			case ScriptObject object -> object.describe();
 			default -> value.toString();
 		};
 	}

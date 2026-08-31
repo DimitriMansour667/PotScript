@@ -54,17 +54,12 @@ public final class BuiltinDocs {
 	}
 
 	private static final Map<String, Builtin> BY_NAME = new LinkedHashMap<>();
-	private static final Map<String, Builtin> METHODS = new LinkedHashMap<>();
 
 	private BuiltinDocs() {
 	}
 
 	private static void doc(String name, String paramSpec, int minArgs, int maxArgs, String returns, String description) {
 		BY_NAME.put(name, new Builtin(name, paramSpec, minArgs, maxArgs, returns, description));
-	}
-
-	private static void method(String name, String paramSpec, int minArgs, int maxArgs, String returns, String description) {
-		METHODS.put(name, new Builtin(name, paramSpec, minArgs, maxArgs, returns, description));
 	}
 
 	static {
@@ -91,31 +86,24 @@ public final class BuiltinDocs {
 		doc("recv", "[timeout]", 0, 1, "list", "Blocks for a message, up to timeout ticks; nil on timeout. Yields [sender, payload].");
 		doc("ping", "host", 1, 1, "bool", "Whether that hostname is reachable on the wifi network right now.");
 
-		// ---- neighbouring blocks ----
-		doc("getBlock", "side, [kind]", 1, 2, "block", "A handle to the neighbour on that side (up/down/north/south/east/west). With kind (\"chest\", \"sign\" or a block id), nil unless the block matches.");
-		doc("rs_reset", "", 0, 0, "nil", "Set all six redstone outputs to 0.");
+		// ---- redstone ----
+		doc("rs_set", "side, level", 2, 2, "nil", "Emit level (clamped 0-15) out of that side, weak and strong.");
+		doc("rs_pulse", "side, level, [ticks]", 2, 3, "nil", "Emit level out of that side for ticks game ticks (default 2), then drop to 0.");
+		doc("rs_get", "side", 1, 1, "number", "The redstone signal the neighbour on that side feeds into the pot.");
+		doc("rs_reset", "", 0, 0, "nil", "Set all six outputs to 0.");
 		doc("rs_wait", "[timeout]", 0, 1, "list", "Blocks until any incoming signal changes, up to timeout ticks. Yields [side, level]; nil on timeout.");
 
-		// ---- block methods: every block ----
-		method("id", "", 0, 0, "string", "Registry id of the block, e.g. \"minecraft:chest\".");
-		method("side", "", 0, 0, "string", "The side this handle looks at, e.g. \"up\".");
-		method("is_air", "", 0, 0, "bool", "Whether the space is currently air.");
-		method("has_inv", "", 0, 0, "bool", "Whether the block currently has an inventory.");
-		method("is_sign", "", 0, 0, "bool", "Whether the block is currently a sign.");
-		method("rs_get", "", 0, 0, "number", "The redstone signal this block feeds into the pot.");
-		method("rs_set", "level", 1, 1, "nil", "Emit level (clamped 0-15) toward this block, weak and strong.");
-		method("rs_pulse", "level, [ticks]", 1, 2, "nil", "Emit level toward this block for ticks game ticks (default 2), then drop to 0.");
+		// ---- neighbor inventories ----
+		doc("block", "side", 1, 1, "string", "Registry id of the block on that side, e.g. \"minecraft:chest\".");
+		doc("inv_size", "side", 1, 1, "number", "Slot count, or nil if the neighbour has no inventory.");
+		doc("inv_get", "side, slot", 2, 2, "list", "[item_id, count], or nil for an empty or out-of-range slot.");
+		doc("inv_count", "side, item", 2, 2, "number", "Total of item across every slot. 0 if there's no inventory.");
+		doc("inv_find", "side, item", 2, 2, "number", "First slot holding item, or -1 if not found.");
+		doc("inv_move", "from, to, [item], [max]", 2, 4, "number", "Moves items between neighbours, hopper-style; returns how many moved.");
 
-		// ---- block methods: chests (anything with an inventory) ----
-		method("size", "", 0, 0, "number", "Slot count. Errors if the block has no inventory.");
-		method("get", "slot", 1, 1, "list", "[item_id, count], or nil for an empty or out-of-range slot.");
-		method("count", "item", 1, 1, "number", "Total of item across every slot.");
-		method("find", "item", 1, 1, "number", "First slot holding item, or -1 if not found.");
-		method("move_inv", "to, [item], [max]", 1, 3, "number", "Moves items into another block (a handle or a side name), hopper-style; returns how many moved.");
-
-		// ---- block methods: signs ----
-		method("read", "", 0, 0, "list", "The 4 front-text lines of the sign. Errors if the block is not a sign.");
-		method("write", "lines, [color]", 1, 2, "nil", "Writes lines (a list of up to 4, or one string) to the sign's front; optional dye color. Errors if the block is not a sign.");
+		// ---- signs ----
+		doc("sign_read", "side", 1, 1, "list", "The 4 front-text lines of the sign on that side, or nil if there is no sign.");
+		doc("sign_write", "side, lines, [color]", 2, 3, "bool", "Writes lines (a list of up to 4, or one string) to the sign's front; optional dye color. False if there is no sign.");
 
 		// ---- world sensors ----
 		doc("pos", "", 0, 0, "list", "[x, y, z] of the pot.");
@@ -163,7 +151,7 @@ public final class BuiltinDocs {
 		doc("len", "x", 1, 1, "number", "Length of a string or list. Errors on anything else.");
 		doc("str", "x", 1, 1, "string", "The printed form of any value.");
 		doc("num", "x", 1, 1, "number", "Parses a string; passes numbers through; nil if unparseable.");
-		doc("type", "x", 1, 1, "string", "\"nil\", \"bool\", \"number\", \"string\", \"list\", \"function\" or \"block\".");
+		doc("type", "x", 1, 1, "string", "\"nil\", \"bool\", \"number\", \"string\", \"list\" or \"function\".");
 
 		// ---- strings ----
 		doc("upper", "s", 1, 1, "string", "Upper-cases a string.");
@@ -203,24 +191,6 @@ public final class BuiltinDocs {
 
 	public static boolean isBuiltin(String name) {
 		return BY_NAME.containsKey(name);
-	}
-
-	/** Every documented block method, in the order the wiki presents them. */
-	public static Collection<Builtin> methods() {
-		return METHODS.values();
-	}
-
-	/**
-	 * The doc entry for a block method — also the source of truth for its
-	 * arity: {@code BlockHandle} builds each bound native from this table, so
-	 * the editor's hints can never disagree with the runtime.
-	 */
-	public static Builtin method(String name) {
-		return METHODS.get(name);
-	}
-
-	public static boolean isMethod(String name) {
-		return METHODS.containsKey(name);
 	}
 
 	/**

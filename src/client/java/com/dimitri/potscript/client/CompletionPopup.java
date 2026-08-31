@@ -102,7 +102,7 @@ final class CompletionPopup {
 
 	private static ChatFormatting colourOf(Kind kind) {
 		return switch (kind) {
-			case BUILTIN, METHOD -> ChatFormatting.AQUA;
+			case BUILTIN -> ChatFormatting.AQUA;
 			case KEYWORD -> ChatFormatting.LIGHT_PURPLE;
 			case FUNCTION -> ChatFormatting.YELLOW;
 			case VARIABLE -> ChatFormatting.WHITE;
